@@ -41,8 +41,7 @@ const CreatorPage = () => {
           *,
           category:creator_categories(name, icon)
         `)
-        .eq('username', username)
-        .eq('username', username)
+        .eq('username', username?.toLowerCase() || '')
         .maybeSingle();
 
       if (error) throw error;
