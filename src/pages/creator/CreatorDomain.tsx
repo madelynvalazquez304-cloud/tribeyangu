@@ -70,8 +70,8 @@ const CreatorDomain = () => {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>How Custom Domains Work</AlertTitle>
-              <AlertDescription>
-                Custom domains allow you to use your own domain (e.g., yourname.com) instead of tribeyangu.com/@yourname
+                <AlertDescription>
+                Custom domains allow you to use your own domain (e.g., yourname.com) instead of {typeof window !== 'undefined' ? `${window.location.origin}/@yourname` : 'tribeyangu.com/@yourname'}
               </AlertDescription>
             </Alert>
 

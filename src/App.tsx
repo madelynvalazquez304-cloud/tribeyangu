@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ErrorBoundary from "@/components/ErrorBoundary";
+
+// Error page
+import ErrorPage from "./pages/ErrorPage";
 
 // Public Pages
 import Index from "./pages/Index";
@@ -46,7 +50,8 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
+          <ErrorBoundary>
+            <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
@@ -152,8 +157,10 @@ const App = () => (
 
             {/* Creator public page - must be last */}
             <Route path="/:username" element={<CreatorPage />} />
+            <Route path="/error" element={<ErrorPage />} />
             <Route path="*" element={<NotFound />} />
-          </Routes>
+            </Routes>
+          </ErrorBoundary>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

@@ -232,7 +232,7 @@ const HowItWorks = () => (
           {
             step: "02",
             title: "Share Your Link",
-            description: "Share tribeyangu.com/@yourname with your fans everywhere.",
+            description: typeof window !== 'undefined' ? `Share ${window.location.origin}/@yourname with your fans everywhere.` : 'Share tribeyangu.com/@yourname with your fans everywhere.',
           },
           {
             step: "03",

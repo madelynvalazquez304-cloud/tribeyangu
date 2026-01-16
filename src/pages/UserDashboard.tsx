@@ -222,7 +222,7 @@ const UserDashboard = () => {
                               placeholder="yourname (no spaces)"
                             />
                             <p className="text-xs text-muted-foreground">
-                              Your page will be at tribeyangu.com/{formData.username || 'yourname'}
+                              Your page will be at {typeof window !== 'undefined' ? `${window.location.origin}/${formData.username || 'yourname'}` : `tribeyangu.com/${formData.username || 'yourname'}`}
                             </p>
                           </div>
                           <div className="space-y-2">
