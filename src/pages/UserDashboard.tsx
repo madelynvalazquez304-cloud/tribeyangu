@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Heart, User, Settings, Loader2, Star, Trophy, Clock, CheckCircle } from 'lucide-react';
+import { Heart, User, Settings, Loader2, Star, Trophy, Clock, CheckCircle, ShoppingBag, Truck } from 'lucide-react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 const UserDashboard = () => {
   const { user } = useAuth();
@@ -83,6 +84,24 @@ const UserDashboard = () => {
         .eq('donor_phone', profile.phone)
         .order('created_at', { ascending: false })
         .limit(10);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.phone
+  });
+
+  const { data: myOrders } = useQuery({
+    queryKey: ['my-orders', user?.id],
+    queryFn: async () => {
+      if (!profile?.phone) return [];
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          creator:creators(display_name, username)
+        `)
+        .eq('customer_phone', profile.phone)
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -312,6 +331,69 @@ const UserDashboard = () => {
                           <p className="font-semibold">KSh {Number(donation.amount).toLocaleString()}</p>
                           <p className="text-xs text-muted-foreground">{donation.status}</p>
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* My Orders */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-primary" />
+                  My Orders
+                </CardTitle>
+                <CardDescription>Track your store purchases</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!myOrders || myOrders.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ShoppingBag className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                    <p>No orders yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {myOrders.map((order: any) => (
+                      <div key={order.id} className="p-4 rounded-lg bg-secondary/30 border border-secondary/50 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] text-muted-foreground font-mono uppercase">Order #{order.order_number || order.id.slice(0, 8)}</p>
+                            <Link to={`/${order.creator?.username}`} className="font-semibold hover:text-primary transition-colors">
+                              {order.creator?.display_name || 'Store Item'}
+                            </Link>
+                          </div>
+                          <Badge variant={order.status === 'delivered' ? 'default' : 'secondary'} className="capitalize">
+                            {order.status}
+                          </Badge>
+                        </div>
+
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-bold text-primary">KES {Number(order.total).toLocaleString()}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        {order.tracking_number && (
+                          <div className="pt-3 border-t border-secondary/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-primary">
+                              <Truck className="w-4 h-4" />
+                              <span className="text-sm font-medium">Tracking: {order.tracking_number}</span>
+                            </div>
+                            {order.tracking_url && (
+                              <a
+                                href={order.tracking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary underline hover:opacity-80 inline-flex items-center gap-1"
+                              >
+                                Live Tracking →
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

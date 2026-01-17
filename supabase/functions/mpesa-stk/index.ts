@@ -13,7 +13,7 @@ interface STKPushRequest {
   creatorId: string;
   donorName?: string;
   message?: string;
-  type: 'donation' | 'vote' | 'merchandise';
+  type: 'donation' | 'vote' | 'merchandise' | 'gift';
   referenceId?: string;
   metadata?: any;
 }
@@ -57,13 +57,17 @@ serve(async (req) => {
     // Prioritize primary config, fallback to first active
     const activeConfigRecord = configs.find(c => c.is_primary) || configs[0];
     const mpesaConfig = activeConfigRecord.config as any;
-    console.log('Using M-PESA config for:', mpesaConfig.paybill, 'Environment:', mpesaConfig.environment);
+    console.log('--- M-PESA CONFIG LOADED ---');
+    console.log('Name:', activeConfigRecord.name);
+    console.log('Provider Type:', mpesaConfig.mpesa_type === 'buygoods' ? 'Till Number (Buy Goods)' : 'Paybill');
+    console.log('ShortCode/Paybill:', mpesaConfig.paybill);
+    console.log('Environment:', mpesaConfig.environment);
+    console.log('--- --- ---');
 
     // Get platform fees from settings
     const { data: settings } = await supabase
       .from('platform_settings')
-      .select('key, value')
-      .in('key', ['platform_fee_percentage', 'vote_fee_percentage']);
+      .select('key, value');
 
     const donationFeePerc = Number(settings?.find(s => s.key === 'platform_fee_percentage')?.value || 5) / 100;
     const voteFeePerc = Number(settings?.find(s => s.key === 'vote_fee_percentage')?.value || 15) / 100;
@@ -108,6 +112,7 @@ serve(async (req) => {
     let feePerc = donationFeePerc;
     if (type === 'vote') feePerc = voteFeePerc;
     if (type === 'merchandise') feePerc = merchFeePerc;
+    if (type === 'gift') feePerc = donationFeePerc; // Use same fee as donation for gifts
 
     const platformFee = amount * feePerc;
     const creatorAmount = amount - platformFee;
@@ -136,9 +141,11 @@ serve(async (req) => {
       recordId = donation.id;
     } else if (type === 'merchandise') {
       // Order
+      const orderNumber = `ORD-${Math.random().toString(36).toUpperCase().slice(2, 10)}`;
       const { data: order, error } = await supabase
         .from('orders')
         .insert({
+          order_number: orderNumber,
           creator_id: creatorId,
           customer_name: donorName || 'Guest',
           customer_phone: formattedPhone,
@@ -175,6 +182,27 @@ serve(async (req) => {
 
         if (itemsError) console.error('Error inserting order items:', itemsError);
       }
+    } else if (type === 'gift') {
+      const { data: gift, error } = await supabase
+        .from('received_gifts')
+        .insert({
+          gift_id: referenceId, // gift_id passed as referenceId
+          creator_id: creatorId,
+          sender_name: donorName || 'Anonymous',
+          is_anonymous: metadata?.is_anonymous || false,
+          amount,
+          platform_fee: platformFee,
+          creator_amount: creatorAmount,
+          status: 'pending'
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('DB Insert Error (gift):', error);
+        throw error;
+      }
+      recordId = gift.id;
     } else {
       // Vote
       const { data: vote, error } = await supabase
@@ -202,6 +230,12 @@ serve(async (req) => {
     console.log('Initiating STK Push for record:', recordId);
     const callbackUrl = `${supabaseUrl}/functions/v1/mpesa-callback`;
     const transactionType = mpesaConfig.mpesa_type === 'buygoods' ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
+    console.log('--- STK PUSH DETAILS ---');
+    console.log('Transaction Type:', transactionType);
+    console.log('Amount:', Math.floor(amount));
+    console.log('Phone:', formattedPhone);
+    console.log('Callback URL:', callbackUrl);
+    console.log('--- --- ---');
 
     const stkPushBody = {
       BusinessShortCode: mpesaConfig.paybill,
@@ -214,7 +248,7 @@ serve(async (req) => {
       PhoneNumber: formattedPhone,
       CallBackURL: callbackUrl,
       AccountReference: `TY${recordId.slice(0, 8)}`,
-      TransactionDesc: type === 'donation' ? 'TribeYangu Donation' : (type === 'vote' ? 'TribeYangu Vote' : 'TribeYangu Order')
+      TransactionDesc: type === 'donation' ? 'TribeYangu Donation' : (type === 'vote' ? 'TribeYangu Vote' : (type === 'gift' ? 'TribeYangu Gift' : 'TribeYangu Order'))
     };
 
     const stkResponse = await fetch(`${baseUrl}/mpesa/stkpush/v1/processrequest`, {
@@ -233,6 +267,7 @@ serve(async (req) => {
       let table = 'donations';
       if (type === 'vote') table = 'votes';
       if (type === 'merchandise') table = 'orders';
+      if (type === 'gift') table = 'received_gifts';
 
       await supabase
         .from(table)
@@ -253,6 +288,7 @@ serve(async (req) => {
       let table = 'donations';
       if (type === 'vote') table = 'votes';
       if (type === 'merchandise') table = 'orders';
+      if (type === 'gift') table = 'received_gifts';
 
       await supabase.from(table).delete().eq('id', recordId);
 

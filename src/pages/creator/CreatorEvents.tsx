@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMyCreator } from '@/hooks/useCreator';
 import { toast } from 'sonner';
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +32,9 @@ const CreatorEvents = () => {
     event_date: '',
     location: '',
     ticket_price: '0',
-    ticket_quantity: '100'
+    ticket_quantity: '100',
+    is_collaborative: false,
+    collaborators: ''
   });
 
   const { data: events, isLoading } = useQuery({
@@ -75,7 +78,9 @@ const CreatorEvents = () => {
           event_date: newEvent.event_date,
           location: newEvent.location,
           creator_id: creator?.id,
-          status: 'pending' // Valid status
+          status: 'pending',
+          is_collaborative: newEvent.is_collaborative,
+          collaborators: newEvent.is_collaborative ? newEvent.collaborators.split(',').map((s: string) => s.trim()) : []
         }])
         .select()
         .single();
@@ -105,7 +110,9 @@ const CreatorEvents = () => {
         event_date: '',
         location: '',
         ticket_price: '0',
-        ticket_quantity: '100'
+        ticket_quantity: '100',
+        is_collaborative: false,
+        collaborators: ''
       });
       toast.success('Event and tickets created successfully');
     },
@@ -204,6 +211,32 @@ const CreatorEvents = () => {
                   </div>
                 </div>
 
+                <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="is_collaborative">Collaborative Event</Label>
+                      <p className="text-xs text-muted-foreground">Collaborate with other creators</p>
+                    </div>
+                    <Switch
+                      id="is_collaborative"
+                      checked={formData.is_collaborative}
+                      onCheckedChange={(checked) => setFormData({ ...formData, is_collaborative: checked })}
+                    />
+                  </div>
+
+                  {formData.is_collaborative && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                      <Label htmlFor="collaborators">Collaborator Usernames</Label>
+                      <Input
+                        id="collaborators"
+                        placeholder="e.g. jdoe, amsmith (separate by commas)"
+                        value={formData.collaborators}
+                        onChange={(e) => setFormData({ ...formData, collaborators: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
                   <Textarea
@@ -268,6 +301,11 @@ const CreatorEvents = () => {
                       <Badge variant="outline" className="ml-1">
                         {event.price && event.price > 0 ? `KES ${event.price}` : 'Free'}
                       </Badge>
+                      {event.is_collaborative && (
+                        <Badge variant="outline" className="text-primary border-primary bg-primary/5">
+                          Collaboration
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -284,7 +322,7 @@ const CreatorEvents = () => {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </DashboardLayout >
   );
 };
 

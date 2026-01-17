@@ -46,15 +46,34 @@ const CreatorWithdrawals = () => {
     enabled: !!creator
   });
 
+  const { data: platformSettings } = useQuery({
+    queryKey: ['platform-settings-public'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('platform_settings')
+        .select('key, value');
+      if (error) throw error;
+
+      const settings: Record<string, any> = {};
+      data.forEach(s => {
+        settings[s.key] = s.value;
+      });
+      return settings;
+    }
+  });
+
+  const minWithdrawal = Number(platformSettings?.min_withdrawal || 500);
+  const maxWithdrawal = Number(platformSettings?.max_withdrawal || 150000);
+  const withdrawalFee = Number(platformSettings?.withdrawal_fee || 50);
+
   const createWithdrawal = useMutation({
     mutationFn: async (amount: number) => {
       if (!creator) throw new Error('No creator');
-      const fee = 50; // Fixed fee
       const { error } = await supabase.from('withdrawals').insert({
         creator_id: creator.id,
         amount,
-        fee,
-        net_amount: amount - fee,
+        fee: withdrawalFee,
+        net_amount: amount - withdrawalFee,
         payment_method: 'mpesa'
       });
       if (error) throw error;
@@ -72,8 +91,12 @@ const CreatorWithdrawals = () => {
 
   const handleSubmit = () => {
     const amountNum = parseInt(amount);
-    if (amountNum < 500) {
-      toast.error('Minimum withdrawal is KSh 500');
+    if (isNaN(amountNum) || amountNum < minWithdrawal) {
+      toast.error(`Minimum withdrawal is KSh ${minWithdrawal.toLocaleString()}`);
+      return;
+    }
+    if (amountNum > maxWithdrawal) {
+      toast.error(`Maximum withdrawal is KSh ${maxWithdrawal.toLocaleString()}`);
       return;
     }
     if (amountNum > (balance || 0)) {
@@ -116,9 +139,9 @@ const CreatorWithdrawals = () => {
                     type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Min 500"
+                    placeholder={`Min ${minWithdrawal}`}
                   />
-                  <p className="text-xs text-muted-foreground">Fee: KSh 50</p>
+                  <p className="text-xs text-muted-foreground">Fee: KSh {withdrawalFee}</p>
                 </div>
               </div>
               <DialogFooter>

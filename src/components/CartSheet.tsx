@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +17,8 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 interface CartSheetProps {
     isOpen: boolean;
@@ -29,33 +32,16 @@ const CartSheet: React.FC<CartSheetProps> = ({ isOpen, onClose }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
+    const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'polling' | 'success' | 'failed'>('idle');
+    const [paymentDialog, setPaymentDialog] = useState(false);
+    const [recordId, setRecordId] = useState('');
 
-    const handleCheckout = async () => {
-        if (items.length === 0) return;
-        if (!phoneNumber) {
-            toast.error('Please enter your M-PESA phone number');
-            return;
-        }
-        if (!customerName) {
-            toast.error('Please enter your name');
-            return;
-        }
-        if (!shippingAddress) {
-            toast.error('Please enter your delivery address');
-            return;
-        }
-
-        setIsCheckingOut(true);
-        try {
-            // For simplicity in this demo, we'll process each creator's items as one order 
-            // but M-Pesa STK usually handles one transaction. 
-            // We'll calculate the total and send one STK push.
-
+    const initiateCheckout = useMutation({
+        mutationFn: async () => {
             const response = await supabase.functions.invoke('mpesa-stk', {
                 body: {
                     phone: phoneNumber,
                     amount: total,
-                    // We'll use the first item's creatorId for the transaction record mapping
                     creatorId: items[0].creatorId,
                     donorName: customerName,
                     type: 'merchandise',
@@ -74,20 +60,86 @@ const CartSheet: React.FC<CartSheetProps> = ({ isOpen, onClose }) => {
             });
 
             if (response.error) throw response.error;
-
-            if (response.data?.success) {
-                toast.success('STK Push sent! Please complete payment on your phone.');
-                // In a real app, we'd poll for status, but for now we'll just clear and close
-                clearCart();
-                onClose();
-            } else {
-                throw new Error(response.data?.error || 'Checkout failed');
-            }
-        } catch (error: any) {
+            if (!response.data?.success) throw new Error(response.data?.error || 'Checkout failed');
+            return response.data;
+        },
+        onSuccess: (data) => {
+            setRecordId(data.recordId);
+            setPaymentStatus('polling');
+        },
+        onError: (error: Error) => {
             console.error('Checkout error:', error);
             toast.error(error.message || 'Failed to initiate checkout');
-        } finally {
-            setIsCheckingOut(false);
+            setPaymentDialog(false);
+            setPaymentStatus('idle');
+        }
+    });
+
+    const handleCheckout = async () => {
+        if (items.length === 0) return;
+        if (!phoneNumber) {
+            toast.error('Please enter your M-PESA phone number');
+            return;
+        }
+        if (!customerName) {
+            toast.error('Please enter your name');
+            return;
+        }
+        if (!shippingAddress) {
+            toast.error('Please enter your delivery address');
+            return;
+        }
+
+        setPaymentDialog(true);
+        setPaymentStatus('processing');
+        initiateCheckout.mutate();
+    };
+
+    // Poll for payment status
+    useEffect(() => {
+        if (paymentStatus !== 'polling' || !recordId) return;
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const response = await supabase.functions.invoke('check-payment', {
+                    body: { recordId, type: 'merchandise' }
+                });
+
+                if ((response as any).error) return;
+
+                const successStats = ['completed', 'confirmed', 'processing'];
+                if (successStats.includes(response.data?.status)) {
+                    setPaymentStatus('success');
+                    clearInterval(pollInterval);
+                    clearCart();
+                } else if (response.data?.status === 'failed' || response.data?.status === 'cancelled') {
+                    setPaymentStatus('failed');
+                    clearInterval(pollInterval);
+                }
+            } catch (err) {
+                console.error('Polling error:', err);
+            }
+        }, 2000);
+
+        const timeout = setTimeout(() => {
+            clearInterval(pollInterval);
+            if (paymentStatus === 'polling') {
+                setPaymentStatus('failed');
+            }
+        }, 120000);
+
+        return () => {
+            clearInterval(pollInterval);
+            clearTimeout(timeout);
+        };
+    }, [paymentStatus, recordId]);
+
+    const resetPayment = () => {
+        setPaymentDialog(false);
+        setPaymentStatus('idle');
+        setRecordId('');
+        if (paymentStatus === 'success') {
+            onClose();
         }
     };
 
@@ -215,9 +267,9 @@ const CartSheet: React.FC<CartSheetProps> = ({ isOpen, onClose }) => {
                             <Button
                                 className="w-full gap-2 h-11"
                                 onClick={handleCheckout}
-                                disabled={isCheckingOut}
+                                disabled={initiateCheckout.isPending}
                             >
-                                {isCheckingOut ? (
+                                {initiateCheckout.isPending ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
                                     <>Checkout with M-PESA</>
@@ -227,6 +279,73 @@ const CartSheet: React.FC<CartSheetProps> = ({ isOpen, onClose }) => {
                     </SheetFooter>
                 )}
             </SheetContent>
+
+            <Dialog open={paymentDialog} onOpenChange={(open) => !open && resetPayment()}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {paymentStatus === 'processing' && 'Initiating Order...'}
+                            {paymentStatus === 'polling' && 'Waiting for Payment...'}
+                            {paymentStatus === 'success' && 'Order Successful!'}
+                            {paymentStatus === 'failed' && 'Checkout Failed'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {paymentStatus === 'processing' && 'Please wait while we prepare your order.'}
+                            {paymentStatus === 'polling' && 'Complete the payment prompt on your phone.'}
+                            {paymentStatus === 'success' && 'Your order has been placed successfully.'}
+                            {paymentStatus === 'failed' && 'There was an error processing your checkout.'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-8 text-center">
+                        {(paymentStatus === 'processing' || paymentStatus === 'polling') && (
+                            <>
+                                <Loader2 className="w-16 h-16 mx-auto mb-4 animate-spin text-primary" />
+                                <p className="text-muted-foreground">
+                                    {paymentStatus === 'processing'
+                                        ? 'Preparing your order...'
+                                        : 'Please complete the payment on your phone'}
+                                </p>
+                                {paymentStatus === 'polling' && (
+                                    <p className="text-sm text-muted-foreground mt-2">
+                                        Check your phone for the M-PESA prompt for KES {total.toLocaleString()}
+                                    </p>
+                                )}
+                            </>
+                        )}
+
+                        {paymentStatus === 'success' && (
+                            <>
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                                    <CheckCircle2 className="w-12 h-12 text-green-600" />
+                                </div>
+                                <h3 className="text-xl font-bold mb-2">Order Confirmed!</h3>
+                                <p className="text-muted-foreground px-4">
+                                    Thank you for your purchase! We've received your order and are processing it. 💚
+                                </p>
+                                <Button className="mt-6 w-full max-w-[200px]" onClick={resetPayment}>
+                                    Great!
+                                </Button>
+                            </>
+                        )}
+
+                        {paymentStatus === 'failed' && (
+                            <>
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                                    <XCircle className="w-12 h-12 text-red-600" />
+                                </div>
+                                <h3 className="text-xl font-bold mb-2">Payment Failed</h3>
+                                <p className="text-muted-foreground px-4">
+                                    Something went wrong or the transaction was cancelled. Please try again.
+                                </p>
+                                <Button variant="outline" className="mt-6 w-full max-w-[200px]" onClick={resetPayment}>
+                                    Try Again
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </Sheet>
     );
 };

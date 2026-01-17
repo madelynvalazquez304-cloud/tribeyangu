@@ -19,7 +19,9 @@ serve(async (req) => {
 
     const { recordId, type } = await req.json();
 
-    const table = type === 'donation' ? 'donations' : 'votes';
+    const table = type === 'donation' ? 'donations' :
+      type === 'vote' ? 'votes' :
+        type === 'gift' ? 'received_gifts' : 'orders';
     const { data, error } = await supabase
       .from(table)
       .select('status, mpesa_receipt')

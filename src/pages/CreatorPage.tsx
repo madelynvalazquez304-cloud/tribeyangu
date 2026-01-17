@@ -54,7 +54,7 @@ const CreatorPage = () => {
     enabled: !!username
   });
 
-  const isOwner = user?.id === creator?.user_id;
+  const isOwner = !!user && !!creator && user.id === creator.user_id;
 
   const { data: links } = useQuery({
     queryKey: ['creator-links', creator?.id],
@@ -186,10 +186,11 @@ const CreatorPage = () => {
           return;
         }
 
-        if (response.data?.status === 'completed') {
+        const successStats = ['completed', 'confirmed', 'processing'];
+        if (successStats.includes(response.data?.status)) {
           setPaymentStatus('success');
           clearInterval(pollInterval);
-        } else if (response.data?.status === 'failed') {
+        } else if (response.data?.status === 'failed' || response.data?.status === 'cancelled') {
           setPaymentStatus('failed');
           clearInterval(pollInterval);
         }
@@ -197,7 +198,7 @@ const CreatorPage = () => {
         console.error('Error while polling payment status:', err);
         // swallow transient errors and let the timeout handle permanent failures
       }
-    }, 3000);
+    }, 2000);
 
     // Stop polling after 2 minutes
     const timeout = setTimeout(() => {
@@ -634,6 +635,12 @@ const CreatorPage = () => {
               {paymentStatus === 'success' && 'Payment Successful!'}
               {paymentStatus === 'failed' && 'Payment Failed'}
             </DialogTitle>
+            <DialogDescription>
+              {paymentStatus === 'processing' && 'Please wait while we send the STK push to your phone.'}
+              {paymentStatus === 'polling' && 'Check your phone and enter your M-PESA PIN.'}
+              {paymentStatus === 'success' && 'Your support has been recorded.'}
+              {paymentStatus === 'failed' && 'The payment could not be completed at this time.'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="py-8 text-center">

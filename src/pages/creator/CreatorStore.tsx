@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMyCreator } from '@/hooks/useCreator';
 import { toast } from 'sonner';
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -28,7 +29,8 @@ const CreatorStore = () => {
     price: '',
     description: '',
     stock: '',
-    image_url: ''
+    image_url: '',
+    fulfillment_by: 'creator'
   });
 
   const { data: merchandise, isLoading } = useQuery({
@@ -69,7 +71,7 @@ const CreatorStore = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['creator-merch'] });
       setIsDialogOpen(false);
-      setFormData({ name: '', price: '', description: '', stock: '', image_url: '' });
+      setFormData({ name: '', price: '', description: '', stock: '', image_url: '', fulfillment_by: 'creator' });
       toast.success('Merchandise added successfully');
     },
     onError: (error: any) => {
@@ -161,6 +163,24 @@ const CreatorStore = () => {
                   />
                   <p className="text-xs text-muted-foreground">Paste a link to your product image</p>
                 </div>
+                <div className="flex items-start space-x-3 p-3 rounded-lg border bg-secondary/20">
+                  <Checkbox
+                    id="fulfillment"
+                    checked={formData.fulfillment_by === 'platform'}
+                    onCheckedChange={(checked) => setFormData({ ...formData, fulfillment_by: checked ? 'platform' : 'creator' })}
+                  />
+                  <div className="grid gap-1.5 leading-none">
+                    <label
+                      htmlFor="fulfillment"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Partner with TribeYangu for fulfillment
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      We'll store, pack, and deliver your orders for a small fee (5%).
+                    </p>
+                  </div>
+                </div>
                 <div className="flex justify-end pt-2">
                   <Button type="submit" disabled={createMerch.isPending}>
                     {createMerch.isPending ? 'Saving...' : 'Create Item'}
@@ -199,7 +219,16 @@ const CreatorStore = () => {
                   {item.images && (item.images as string[]).length > 0 ? (
                     <img src={(item.images as string[])[0]} alt={item.name} className="w-full h-full object-cover" />
                   ) : (
-                    <Package className="w-12 h-12 text-muted-foreground/30" />
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                      <Package className="w-12 h-12 text-muted-foreground/30" />
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground/30">No Image</span>
+                    </div>
+                  )}
+                  {(item as any).fulfillment_by === 'platform' && (
+                    <div className="absolute top-2 left-2 px-2 py-1 rounded bg-primary/90 text-[10px] font-bold text-white flex items-center gap-1 shadow-sm">
+                      <ShoppingBag className="w-3 h-3" />
+                      TRIBE FULFILLED
+                    </div>
                   )}
                 </div>
                 <CardHeader className="p-4">

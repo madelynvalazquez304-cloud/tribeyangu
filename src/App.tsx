@@ -31,6 +31,7 @@ import AdminTransactions from "./pages/admin/AdminTransactions";
 import AdminAwards from "./pages/admin/AdminAwards";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminGifts from "./pages/admin/AdminGifts";
 
 // Creator Pages
 import CreatorDashboard from "./pages/creator/CreatorDashboard";
@@ -64,7 +65,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <ErrorBoundary>
               <Routes>
                 {/* Public Routes */}
@@ -125,6 +126,11 @@ const App = () => (
                 <Route path="/admin/settings" element={
                   <ProtectedRoute requiredRole="admin">
                     <AdminSettings />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/gifts" element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminGifts />
                   </ProtectedRoute>
                 } />
 

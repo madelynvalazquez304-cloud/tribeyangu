@@ -24,7 +24,8 @@ import {
   Shield,
   Palette,
   Wallet,
-  FolderKanban
+  FolderKanban,
+  Gift
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -56,6 +57,7 @@ const adminNavItems: NavItem[] = [
   { label: 'Transactions', href: '/admin/transactions', icon: DollarSign },
   { label: 'Awards & Voting', href: '/admin/awards', icon: Trophy },
   { label: 'Payment Config', href: '/admin/payments', icon: CreditCard },
+  { label: 'Gifts Management', href: '/admin/gifts', icon: Gift },
   { label: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
