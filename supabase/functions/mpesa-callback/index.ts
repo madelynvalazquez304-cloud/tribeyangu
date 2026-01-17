@@ -1,7 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -65,7 +75,7 @@ serve(async (req) => {
       }
 
       if (table === 'donations') {
-        await supabase
+        const { error: updateError } = await supabase
           .from('donations')
           .update({
             status: 'completed',
@@ -73,8 +83,10 @@ serve(async (req) => {
           })
           .eq('id', record.id);
 
+        if (updateError) throw updateError;
+
         // Create transaction record
-        await supabase.from('transactions').insert({
+        const { error: transError } = await supabase.from('transactions').insert({
           creator_id: record.creator_id,
           type: 'donation',
           amount: record.amount,
@@ -88,10 +100,9 @@ serve(async (req) => {
           description: `Donation from ${record.donor_name || 'Anonymous'}`
         });
 
-        // Update creator stats
-        await supabase.rpc('update_creator_donation_stats', { _donation_id: record.id });
+        if (transError) throw transError;
       } else {
-        await supabase
+        const { error: updateError } = await supabase
           .from('votes')
           .update({
             status: 'confirmed',
@@ -99,8 +110,32 @@ serve(async (req) => {
           })
           .eq('id', record.id);
 
-        // Update nominee vote count
-        await supabase.rpc('update_nominee_votes', { _vote_id: record.id });
+        if (updateError) throw updateError;
+
+        // Create transaction record for votes
+        const { data: nominee } = await supabase
+          .from('award_nominees')
+          .select('creator_id')
+          .eq('id', record.nominee_id)
+          .single();
+
+        if (nominee) {
+          const { error: transError } = await supabase.from('transactions').insert({
+            creator_id: nominee.creator_id,
+            type: 'vote',
+            amount: record.amount_paid,
+            fee: record.platform_fee,
+            net_amount: record.amount_paid - record.platform_fee,
+            status: 'completed',
+            payment_provider: 'mpesa',
+            payment_reference: mpesaReceipt,
+            reference_type: 'vote',
+            reference_id: record.id,
+            description: `Votes from ${record.voter_phone || 'Anonymous'}`
+          });
+
+          if (transError) console.error('Error creating vote transaction:', transError);
+        }
       }
     } else {
       // Payment failed
@@ -111,7 +146,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }));
-  } catch (error) {
+  } catch (error: any) {
     console.error('Callback Error:', error);
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }));
   }

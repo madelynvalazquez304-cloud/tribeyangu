@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 interface STKPushRequest {
@@ -21,6 +22,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Health check
+  if (req.method === 'GET') {
+    return new Response(JSON.stringify({ status: 'ok', message: 'M-PESA STK Function is alive' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -30,28 +38,34 @@ serve(async (req) => {
     const { phone, amount, creatorId, donorName, message, type, referenceId } = body;
 
     // Get active M-PESA config
-    const { data: config, error: configError } = await supabase
+    console.log('Fetching M-PESA config...');
+    const { data: configs, error: configError } = await supabase
       .from('payment_configs')
-      .select('config')
+      .select('config, is_primary')
       .eq('provider', 'mpesa')
-      .eq('is_active', true)
-      .eq('is_primary', true)
-      .single();
+      .eq('is_active', true);
 
-    if (configError || !config) {
+    if (configError || !configs || configs.length === 0) {
+      console.error('M-PESA config error:', configError || 'No active config found');
       return new Response(
-        JSON.stringify({ error: 'M-PESA not configured' }),
+        JSON.stringify({ error: 'M-PESA not configured. Please add an active M-Pesa config in the Admin Panel.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const mpesaConfig = config.config as {
-      consumer_key: string;
-      consumer_secret: string;
-      paybill: string;
-      passkey: string;
-      environment: string;
-    };
+    // Prioritize primary config, fallback to first active
+    const activeConfigRecord = configs.find(c => c.is_primary) || configs[0];
+    const mpesaConfig = activeConfigRecord.config as any;
+    console.log('Using M-PESA config for:', mpesaConfig.paybill, 'Environment:', mpesaConfig.environment);
+
+    // Get platform fees from settings
+    const { data: settings } = await supabase
+      .from('platform_settings')
+      .select('key, value')
+      .in('key', ['platform_fee_percentage', 'vote_fee_percentage']);
+
+    const donationFeePerc = Number(settings?.find(s => s.key === 'platform_fee_percentage')?.value || 5) / 100;
+    const voteFeePerc = Number(settings?.find(s => s.key === 'vote_fee_percentage')?.value || 15) / 100;
 
     // Determine base URL based on environment
     const baseUrl = mpesaConfig.environment === 'production'
@@ -59,13 +73,16 @@ serve(async (req) => {
       : 'https://sandbox.safaricom.co.ke';
 
     // Get OAuth token
+    console.log('Requesting OAuth token from Safaricom...');
     const auth = btoa(`${mpesaConfig.consumer_key}:${mpesaConfig.consumer_secret}`);
     const tokenResponse = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
       headers: { Authorization: `Basic ${auth}` }
     });
 
     if (!tokenResponse.ok) {
-      throw new Error('Failed to get M-PESA token');
+      const errText = await tokenResponse.text();
+      console.error('Safaricom Auth Error:', errText);
+      throw new Error('Failed to get M-PESA token. Check your Consumer Key and Secret.');
     }
 
     const { access_token } = await tokenResponse.json();
@@ -83,8 +100,10 @@ serve(async (req) => {
     const password = btoa(`${mpesaConfig.paybill}${mpesaConfig.passkey}${timestamp}`);
 
     // Create pending donation/vote record
+    console.log('Creating pending record in DB...');
     let recordId: string;
-    const platformFee = type === 'donation' ? amount * 0.05 : amount * 0.2;
+    const feePerc = type === 'donation' ? donationFeePerc : voteFeePerc;
+    const platformFee = amount * feePerc;
     const creatorAmount = amount - platformFee;
 
     if (type === 'donation') {
@@ -104,7 +123,10 @@ serve(async (req) => {
         .select('id')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('DB Insert Error (donation):', error);
+        throw error;
+      }
       recordId = donation.id;
     } else {
       // Vote
@@ -122,18 +144,24 @@ serve(async (req) => {
         .select('id')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('DB Insert Error (vote):', error);
+        throw error;
+      }
       recordId = vote.id;
     }
 
     // Initiate STK Push
+    console.log('Initiating STK Push for record:', recordId);
     const callbackUrl = `${supabaseUrl}/functions/v1/mpesa-callback`;
+    const transactionType = mpesaConfig.mpesa_type === 'buygoods' ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
+
     const stkPushBody = {
       BusinessShortCode: mpesaConfig.paybill,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
-      Amount: amount,
+      TransactionType: transactionType,
+      Amount: Math.floor(amount),
       PartyA: formattedPhone,
       PartyB: mpesaConfig.paybill,
       PhoneNumber: formattedPhone,

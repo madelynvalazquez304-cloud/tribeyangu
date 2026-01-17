@@ -48,6 +48,7 @@ const AdminPayments = () => {
     paybill: '',
     passkey: '',
     environment: 'sandbox',
+    mpesa_type: 'paybill' as 'paybill' | 'buygoods',
     // PayPal fields
     client_id: '',
     client_secret: '',
@@ -61,7 +62,7 @@ const AdminPayments = () => {
         .from('payment_configs')
         .select('*')
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
       return data as PaymentConfig[];
     }
@@ -70,14 +71,15 @@ const AdminPayments = () => {
   const createConfig = useMutation({
     mutationFn: async (data: typeof formData) => {
       let config: Record<string, any> = {};
-      
+
       if (data.provider === 'mpesa') {
         config = {
           consumer_key: data.consumer_key,
           consumer_secret: data.consumer_secret,
           paybill: data.paybill,
           passkey: data.passkey,
-          environment: data.environment
+          environment: data.environment,
+          mpesa_type: data.mpesa_type
         };
       } else if (data.provider === 'paypal') {
         config = {
@@ -96,7 +98,7 @@ const AdminPayments = () => {
           is_active: data.is_active,
           is_primary: data.is_primary
         });
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -112,14 +114,15 @@ const AdminPayments = () => {
   const updateConfig = useMutation({
     mutationFn: async ({ id, ...data }: typeof formData & { id: string }) => {
       let config: Record<string, any> = {};
-      
+
       if (data.provider === 'mpesa') {
         config = {
           consumer_key: data.consumer_key,
           consumer_secret: data.consumer_secret,
           paybill: data.paybill,
           passkey: data.passkey,
-          environment: data.environment
+          environment: data.environment,
+          mpesa_type: data.mpesa_type
         };
       } else if (data.provider === 'paypal') {
         config = {
@@ -138,7 +141,7 @@ const AdminPayments = () => {
           is_primary: data.is_primary
         })
         .eq('id', id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -157,7 +160,7 @@ const AdminPayments = () => {
         .from('payment_configs')
         .delete()
         .eq('id', id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -182,6 +185,7 @@ const AdminPayments = () => {
       paybill: '',
       passkey: '',
       environment: 'sandbox',
+      mpesa_type: 'paybill',
       client_id: '',
       client_secret: '',
       paypal_environment: 'sandbox'
@@ -201,6 +205,7 @@ const AdminPayments = () => {
       paybill: configData.paybill || '',
       passkey: configData.passkey || '',
       environment: configData.environment || 'sandbox',
+      mpesa_type: configData.mpesa_type || 'paybill',
       client_id: configData.client_id || '',
       client_secret: configData.client_secret || '',
       paypal_environment: configData.environment || 'sandbox'
@@ -259,7 +264,7 @@ const AdminPayments = () => {
                   Configure payment provider credentials
                 </DialogDescription>
               </DialogHeader>
-              
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Configuration Name *</Label>
@@ -270,7 +275,7 @@ const AdminPayments = () => {
                     placeholder="e.g., Production M-PESA"
                   />
                 </div>
-                
+
                 {!editingConfig && (
                   <div className="space-y-2">
                     <Label>Provider</Label>
@@ -337,6 +342,27 @@ const AdminPayments = () => {
                         onChange={(e) => setFormData({ ...formData, passkey: e.target.value })}
                         placeholder="Daraja Passkey"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>M-PESA Type</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={formData.mpesa_type === 'paybill' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setFormData({ ...formData, mpesa_type: 'paybill' })}
+                        >
+                          Paybill
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={formData.mpesa_type === 'buygoods' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setFormData({ ...formData, mpesa_type: 'buygoods' })}
+                        >
+                          Till Number
+                        </Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Environment</Label>
@@ -407,7 +433,7 @@ const AdminPayments = () => {
                     </div>
                   </>
                 )}
-                
+
                 <div className="flex items-center justify-between">
                   <Label htmlFor="active">Active</Label>
                   <Switch
@@ -416,7 +442,7 @@ const AdminPayments = () => {
                     onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <Label htmlFor="primary">Primary Configuration</Label>
                   <Switch
@@ -495,11 +521,10 @@ const AdminPayments = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            config.is_active 
-                              ? 'bg-green-100 text-green-700' 
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.is_active
+                              ? 'bg-green-100 text-green-700'
                               : 'bg-muted text-muted-foreground'
-                          }`}>
+                            }`}>
                             {config.is_active ? 'Active' : 'Inactive'}
                           </span>
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(config)}>
@@ -592,11 +617,10 @@ const AdminPayments = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            config.is_active 
-                              ? 'bg-green-100 text-green-700' 
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.is_active
+                              ? 'bg-green-100 text-green-700'
                               : 'bg-muted text-muted-foreground'
-                          }`}>
+                            }`}>
                             {config.is_active ? 'Active' : 'Inactive'}
                           </span>
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(config)}>
