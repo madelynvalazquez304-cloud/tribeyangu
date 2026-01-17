@@ -8,12 +8,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Heart, Users, Share2, Check, ExternalLink, Loader2, Phone, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Heart, Users, Share2, Check, ExternalLink, Loader2, Phone, AlertCircle, CheckCircle2, XCircle, ShoppingBag, Package } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import NotFound from './NotFound';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCart } from '@/contexts/CartContext';
+import CartSheet from '@/components/CartSheet';
 
 const donationAmounts = [100, 300, 500, 1000];
 
@@ -31,6 +33,8 @@ const CreatorPage = () => {
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [checkoutRequestId, setCheckoutRequestId] = useState('');
   const [recordId, setRecordId] = useState('');
+  const { addItem } = useCart();
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   const { data: creator, isLoading, error } = useQuery({
     queryKey: ['creator', username],
@@ -50,6 +54,8 @@ const CreatorPage = () => {
     enabled: !!username
   });
 
+  const isOwner = user?.id === creator?.user_id;
+
   const { data: links } = useQuery({
     queryKey: ['creator-links', creator?.id],
     queryFn: async () => {
@@ -59,6 +65,26 @@ const CreatorPage = () => {
         .eq('creator_id', creator!.id)
         .eq('is_active', true)
         .order('display_order');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!creator
+  });
+
+  const { data: merchandise } = useQuery({
+    queryKey: ['creator-merch', creator?.id, isOwner],
+    queryFn: async () => {
+      let query = supabase
+        .from('merchandise')
+        .select('*')
+        .eq('creator_id', creator!.id);
+
+      // If not the owner, only show active and approved merch
+      if (!isOwner) {
+        query = query.eq('is_active', true).eq('is_approved', true);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -228,6 +254,13 @@ const CreatorPage = () => {
     }
   };
 
+  const scrollToSupport = () => {
+    const element = document.getElementById('support-section');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   if (isLoading) {
     return (
       <>
@@ -252,7 +285,6 @@ const CreatorPage = () => {
   } as React.CSSProperties;
 
   // Handle non-approved statuses
-  const isOwner = user?.id === creator.user_id;
 
   if (creator.status !== 'approved' && !isOwner) {
     if (creator.status === 'pending') {
@@ -338,9 +370,19 @@ const CreatorPage = () => {
                           <h1 className="font-display text-2xl md:text-3xl font-bold">{creator.display_name}</h1>
                           <p className="text-muted-foreground">@{creator.username}</p>
                         </div>
-                        <Button variant="outline" size="sm" onClick={handleShare} className="gap-2">
-                          <Share2 className="w-4 h-4" /> Share
-                        </Button>
+                        <div className="flex flex-col gap-2">
+                          <Button variant="outline" size="sm" onClick={handleShare} className="gap-2">
+                            <Share2 className="w-4 h-4" /> Share
+                          </Button>
+                          <Button
+                            className="gap-2 shadow-md animate-pulse hover:animate-none"
+                            size="sm"
+                            style={{ backgroundColor: creator.theme_primary }}
+                            onClick={scrollToSupport}
+                          >
+                            <Heart className="w-4 h-4 fill-current" /> Show Love
+                          </Button>
+                        </div>
                       </div>
 
                       {creator.tribe_name && (
@@ -368,22 +410,84 @@ const CreatorPage = () => {
 
               {/* Links */}
               {links && links.length > 0 && (
-                <Card>
+                <Card className="shadow-sm border-none bg-card/60 backdrop-blur-sm">
                   <CardContent className="p-6">
-                    <h2 className="font-semibold mb-4">Links</h2>
-                    <div className="space-y-2">
+                    <h2 className="font-semibold mb-4 flex items-center gap-2">
+                      <ExternalLink className="w-5 h-5 text-primary" />
+                      Links
+                    </h2>
+                    <div className="grid gap-3">
                       {links.map((link) => (
                         <a
                           key={link.id}
-                          href={link.url}
+                          href={link.url.startsWith('http') ? link.url : `https://${link.url}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                          className="flex items-center gap-4 p-4 rounded-xl bg-secondary/40 hover:bg-secondary/70 transition-all group border border-transparent hover:border-primary/20"
                         >
-                          <span className="text-xl">{link.icon || '🔗'}</span>
-                          <span className="font-medium flex-1">{link.title}</span>
-                          <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-2xl group-hover:scale-110 transition-transform">{link.icon || '🔗'}</span>
+                          <span className="font-medium flex-1 group-hover:text-primary transition-colors">{link.title}</span>
+                          <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </a>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Store */}
+              {merchandise && merchandise.length > 0 && (
+                <Card className="shadow-sm border-none bg-card/60 backdrop-blur-sm">
+                  <CardContent className="p-6">
+                    <h2 className="font-semibold mb-4 flex items-center gap-2">
+                      <ShoppingBag className="w-5 h-5 text-primary" />
+                      {creator.display_name.split(' ')[0]}'s Store
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {merchandise.map((item) => (
+                        <div key={item.id} className="group relative rounded-xl overflow-hidden bg-secondary/30 border border-transparent hover:border-primary/20 transition-all flex flex-col">
+                          <div className="aspect-square bg-secondary/50 flex items-center justify-center relative">
+                            {item.images && (item.images as string[]).length > 0 ? (
+                              <img src={(item.images as string[])[0]} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                            ) : (
+                              <Package className="w-12 h-12 text-muted-foreground/30" />
+                            )}
+                            {isOwner && !item.is_approved && (
+                              <div className="absolute top-2 left-2 px-2 py-1 rounded bg-amber-500/90 text-[10px] font-bold text-white flex items-center gap-1 shadow-sm">
+                                <AlertCircle className="w-3 h-3" />
+                                PENDING APPROVAL
+                              </div>
+                            )}
+                            <div className="absolute top-2 right-2 px-2 py-1 rounded bg-black/60 text-white text-xs font-bold backdrop-blur-sm">
+                              KES {Number(item.price).toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="p-4 flex flex-col flex-1">
+                            <h3 className="font-semibold text-sm mb-1 line-clamp-1">{item.name}</h3>
+                            <p className="text-xs text-muted-foreground line-clamp-2 flex-1 mb-3">{item.description || 'No description available'}</p>
+                            <Button
+                              size="sm"
+                              className="w-full h-8 text-[11px] gap-2"
+                              style={{ backgroundColor: creator.theme_primary }}
+                              disabled={!item.is_active || (!item.is_approved && !isOwner)}
+                              onClick={() => {
+                                addItem({
+                                  id: item.id,
+                                  name: item.name,
+                                  price: Number(item.price),
+                                  quantity: 1,
+                                  image: item.images?.[0],
+                                  creatorId: creator.id
+                                });
+                                toast.success(`${item.name} added to cart!`);
+                                setIsCartOpen(true);
+                              }}
+                            >
+                              <ShoppingBag className="w-3 h-3" />
+                              Add to cart
+                            </Button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </CardContent>
@@ -419,7 +523,7 @@ const CreatorPage = () => {
             </div>
 
             {/* Donation Sidebar */}
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1" id="support-section">
               <div className="sticky top-24">
                 <Card className="shadow-lg overflow-hidden">
                   <div className="h-2" style={{ backgroundColor: creator.theme_primary }} />
@@ -518,6 +622,7 @@ const CreatorPage = () => {
         </div>
       </main>
       <Footer />
+      <CartSheet isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
 
       {/* Payment Dialog */}
       <Dialog open={paymentDialog} onOpenChange={(open) => !open && resetPayment()}>

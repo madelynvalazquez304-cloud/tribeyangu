@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
-const CreatorMerchandise = () => {
+const CreatorStore = () => {
   const { data: creator } = useMyCreator();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -27,7 +27,8 @@ const CreatorMerchandise = () => {
     name: '',
     price: '',
     description: '',
-    stock: ''
+    stock: '',
+    image_url: ''
   });
 
   const { data: merchandise, isLoading } = useQuery({
@@ -54,7 +55,10 @@ const CreatorMerchandise = () => {
           ...newMerch,
           creator_id: creator?.id,
           price: parseFloat(newMerch.price),
-          stock: parseInt(newMerch.stock) || 0
+          stock: parseInt(newMerch.stock) || 0,
+          images: newMerch.image_url ? [newMerch.image_url] : [],
+          is_approved: true,
+          is_active: true
         }])
         .select()
         .single();
@@ -65,7 +69,7 @@ const CreatorMerchandise = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['creator-merch'] });
       setIsDialogOpen(false);
-      setFormData({ name: '', price: '', description: '', stock: '' });
+      setFormData({ name: '', price: '', description: '', stock: '', image_url: '' });
       toast.success('Merchandise added successfully');
     },
     onError: (error: any) => {
@@ -87,8 +91,8 @@ const CreatorMerchandise = () => {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Merchandise</h1>
-            <p className="text-muted-foreground">Manage your shop items and inventory</p>
+            <h1 className="text-3xl font-bold tracking-tight">Store</h1>
+            <p className="text-muted-foreground">Manage your store items and inventory</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -99,7 +103,7 @@ const CreatorMerchandise = () => {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add New Merchandise</DialogTitle>
+                <DialogTitle>Add New Item</DialogTitle>
                 <DialogDescription>Create a new item for your supporters to buy.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -147,6 +151,16 @@ const CreatorMerchandise = () => {
                     placeholder="Describe your item..."
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="image_url">Image URL</Label>
+                  <Input
+                    id="image_url"
+                    value={formData.image_url}
+                    onChange={e => setFormData({ ...formData, image_url: e.target.value })}
+                    placeholder="https://example.com/product-image.jpg"
+                  />
+                  <p className="text-xs text-muted-foreground">Paste a link to your product image</p>
+                </div>
                 <div className="flex justify-end pt-2">
                   <Button type="submit" disabled={createMerch.isPending}>
                     {createMerch.isPending ? 'Saving...' : 'Create Item'}
@@ -170,7 +184,7 @@ const CreatorMerchandise = () => {
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
-              <h3 className="text-lg font-medium text-foreground">No merchandise yet</h3>
+              <h3 className="text-lg font-medium text-foreground">No items yet</h3>
               <p className="mb-4">Start selling by adding your first item.</p>
               <Button variant="outline" onClick={() => setIsDialogOpen(true)}>
                 Add First Item
@@ -181,8 +195,12 @@ const CreatorMerchandise = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {merchandise?.map((item) => (
               <Card key={item.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                <div className="aspect-video bg-secondary flex items-center justify-center">
-                  <Package className="w-12 h-12 text-muted-foreground/30" />
+                <div className="aspect-video bg-secondary flex items-center justify-center relative overflow-hidden">
+                  {item.images && (item.images as string[]).length > 0 ? (
+                    <img src={(item.images as string[])[0]} alt={item.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="w-12 h-12 text-muted-foreground/30" />
+                  )}
                 </div>
                 <CardHeader className="p-4">
                   <div className="flex justify-between items-start gap-2">
@@ -215,4 +233,4 @@ const CreatorMerchandise = () => {
   );
 };
 
-export default CreatorMerchandise;
+export default CreatorStore;

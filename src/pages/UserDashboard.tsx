@@ -200,7 +200,7 @@ const UserDashboard = () => {
                 ) : (
                   <div className="flex items-center justify-between">
                     <p className="text-muted-foreground">
-                      Create your page and start receiving donations, selling merchandise, and more.
+                      Create your page and start receiving donations, selling store items, and more.
                     </p>
                     <Dialog open={isRequestOpen} onOpenChange={setIsRequestOpen}>
                       <DialogTrigger asChild>

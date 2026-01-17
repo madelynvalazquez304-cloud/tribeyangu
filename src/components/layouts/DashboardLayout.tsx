@@ -64,7 +64,7 @@ const creatorNavItems: NavItem[] = [
   { label: 'Donations', href: '/dashboard/donations', icon: Heart },
   { label: 'Withdrawals', href: '/dashboard/withdrawals', icon: Wallet },
   { label: 'Events', href: '/dashboard/events', icon: Ticket },
-  { label: 'Merchandise', href: '/dashboard/merchandise', icon: ShoppingBag },
+  { label: 'Store', href: '/dashboard/store', icon: ShoppingBag },
   { label: 'Links', href: '/dashboard/links', icon: LinkIcon },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { label: 'Customize', href: '/dashboard/customize', icon: Palette },
@@ -156,8 +156,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, type }) => 
           <div className="px-4 py-3">
             <div className={cn(
               "px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2",
-              type === 'admin' 
-                ? "bg-destructive/10 text-destructive" 
+              type === 'admin'
+                ? "bg-destructive/10 text-destructive"
                 : "bg-primary/10 text-primary"
             )}>
               {type === 'admin' ? (
