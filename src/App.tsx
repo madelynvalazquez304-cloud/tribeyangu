@@ -41,6 +41,19 @@ import CreatorSettings from "./pages/creator/CreatorSettings";
 import CreatorMerchandise from "./pages/creator/CreatorMerchandise";
 import CreatorEvents from "./pages/creator/CreatorEvents";
 
+// Support & legal
+import Support from "./pages/Support";
+import Help from "./pages/Help";
+import FAQ from "./pages/FAQ";
+import Contact from "./pages/Contact";
+import CommunityGuidelines from "./pages/CommunityGuidelines";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
+import CookiePolicy from "./pages/CookiePolicy";
+
+// Creator info
+import AboutCreators from "./pages/creators/AboutCreators";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -156,6 +169,19 @@ const App = () => (
             } />
 
             {/* Creator public page - must be last */}
+            {/* Support & legal pages */}
+            <Route path="/support" element={<Support />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/faq" element={<FAQ />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/community" element={<CommunityGuidelines />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/cookies" element={<CookiePolicy />} />
+
+            {/* Creator about */}
+            <Route path="/creators/about" element={<AboutCreators />} />
+
             <Route path="/:username" element={<CreatorPage />} />
             <Route path="/error" element={<ErrorPage />} />
             <Route path="*" element={<NotFound />} />

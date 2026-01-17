@@ -86,22 +86,51 @@ const CreatorPage = () => {
       const amount = customAmount ? parseInt(customAmount) : selectedAmount;
       if (!amount || amount < 10) throw new Error('Minimum amount is KSh 10');
       if (!phoneNumber) throw new Error('Phone number is required');
+      // Quick env check (helps diagnose missing config in deployments)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      if (!supabaseUrl) {
+        throw new Error('Supabase URL not configured. Check VITE_SUPABASE_URL in your environment.')
+      }
 
-      const response = await supabase.functions.invoke('mpesa-stk', {
-        body: {
-          phone: phoneNumber,
-          amount,
-          creatorId: creator!.id,
-          donorName: donorName || undefined,
-          message: message || undefined,
-          type: 'donation'
+      try {
+        const response = await supabase.functions.invoke('mpesa-stk', {
+          body: {
+            phone: phoneNumber,
+            amount,
+            creatorId: creator!.id,
+            donorName: donorName || undefined,
+            message: message || undefined,
+            type: 'donation'
+          }
+        });
+
+        // Low-level invoke error (network / auth / not found)
+        if ((response as any).error) {
+          console.error('Supabase function invoke error:', (response as any).error);
+          const errMsg = ((response as any).error?.message) || 'Failed to invoke payment function';
+          throw new Error(errMsg);
         }
-      });
 
-      if (response.error) throw new Error(response.error.message);
-      if (!response.data.success) throw new Error(response.data.error);
+        // Function executed but returned a domain-level error
+        if (!response.data?.success) {
+          console.error('STK push returned non-success:', response.data);
+          const apiErr = response.data?.error || 'STK Push failed';
+          throw new Error(apiErr);
+        }
 
-      return response.data;
+        return response.data;
+      } catch (err: any) {
+        console.error('STK invocation failed:', err);
+        let message = err?.message || String(err);
+        if (message.includes('Failed to fetch')) {
+          message = 'Network error: cannot reach Supabase Functions. Check your SUPABASE URL and network connectivity.';
+        } else if (/not found/i.test(message) || /404/.test(message)) {
+          message = 'Payment function not found. Has the Supabase Edge Function "mpesa-stk" been deployed?';
+        } else if (/401|403/.test(message)) {
+          message = 'Authorization error calling payment function. Check your Supabase keys and function permissions.';
+        }
+        throw new Error(message);
+      }
     },
     onSuccess: (data) => {
       setCheckoutRequestId(data.checkoutRequestId);
@@ -120,16 +149,27 @@ const CreatorPage = () => {
     if (paymentStatus !== 'polling' || !recordId) return;
 
     const pollInterval = setInterval(async () => {
-      const response = await supabase.functions.invoke('check-payment', {
-        body: { recordId, type: 'donation' }
-      });
+      try {
+        const response = await supabase.functions.invoke('check-payment', {
+          body: { recordId, type: 'donation' }
+        });
 
-      if (response.data?.status === 'completed') {
-        setPaymentStatus('success');
-        clearInterval(pollInterval);
-      } else if (response.data?.status === 'failed') {
-        setPaymentStatus('failed');
-        clearInterval(pollInterval);
+        if ((response as any).error) {
+          console.error('check-payment invoke error', (response as any).error);
+          // Keep polling a bit but mark as failed after timeout
+          return;
+        }
+
+        if (response.data?.status === 'completed') {
+          setPaymentStatus('success');
+          clearInterval(pollInterval);
+        } else if (response.data?.status === 'failed') {
+          setPaymentStatus('failed');
+          clearInterval(pollInterval);
+        }
+      } catch (err) {
+        console.error('Error while polling payment status:', err);
+        // swallow transient errors and let the timeout handle permanent failures
       }
     }, 3000);
 

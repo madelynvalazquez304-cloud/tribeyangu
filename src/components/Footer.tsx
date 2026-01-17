@@ -63,6 +63,11 @@ const Footer = () => {
           <div>
             <h4 className="font-display text-lg font-semibold mb-4 text-cream">Support</h4>
             <ul className="space-y-3">
+                <li>
+                  <Link to="/support" className="text-cream/70 hover:text-terracotta transition-colors text-sm">
+                    Support
+                  </Link>
+                </li>
               <li>
                 <Link to="/help" className="text-cream/70 hover:text-terracotta transition-colors text-sm">
                   Help Center

@@ -25,10 +25,7 @@ const Header = () => {
             <Link to="/explore" className="text-muted-foreground hover:text-foreground transition-colors font-medium">
               Explore Creators
             </Link>
-            <Link to="/how-it-works" className="text-muted-foreground hover:text-foreground transition-colors font-medium">
-              How It Works
-            </Link>
-            <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors font-medium">
+            <Link to="/creators/about" className="text-muted-foreground hover:text-foreground transition-colors font-medium">
               For Creators
             </Link>
           </nav>
@@ -68,14 +65,7 @@ const Header = () => {
                 Explore Creators
               </Link>
               <Link
-                to="/how-it-works"
-                className="text-muted-foreground hover:text-foreground transition-colors font-medium py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                How It Works
-              </Link>
-              <Link
-                to="/pricing"
+                to="/creators/about"
                 className="text-muted-foreground hover:text-foreground transition-colors font-medium py-2"
                 onClick={() => setIsMenuOpen(false)}
               >
