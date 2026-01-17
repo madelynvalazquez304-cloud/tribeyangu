@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMyCreator } from '@/hooks/useCreator';
 import { toast } from 'sonner';
 import { Checkbox } from "@/components/ui/checkbox";
+import ImageUpload from '@/components/ImageUpload';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,7 @@ const CreatorStore = () => {
   const { data: creator } = useMyCreator();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
     price: '',
@@ -51,14 +53,15 @@ const CreatorStore = () => {
 
   const createMerch = useMutation({
     mutationFn: async (newMerch: any) => {
+      const { image_url, ...merchData } = newMerch;
       const { data, error } = await supabase
         .from('merchandise')
         .insert([{
-          ...newMerch,
+          ...merchData,
           creator_id: creator?.id,
           price: parseFloat(newMerch.price),
           stock: parseInt(newMerch.stock) || 0,
-          images: newMerch.image_url ? [newMerch.image_url] : [],
+          images: image_url ? [image_url] : [],
           is_approved: true,
           is_active: true
         }])
@@ -79,13 +82,82 @@ const CreatorStore = () => {
     }
   });
 
+  const updateMerch = useMutation({
+    mutationFn: async (updatedMerch: any) => {
+      const { id, image_url, ...merchData } = updatedMerch;
+      const { data, error } = await supabase
+        .from('merchandise')
+        .update({
+          ...merchData,
+          price: parseFloat(updatedMerch.price),
+          stock: parseInt(updatedMerch.stock) || 0,
+          images: image_url ? [image_url] : [],
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['creator-merch'] });
+      setIsDialogOpen(false);
+      resetForm();
+      toast.success('Merchandise updated successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update merchandise');
+    }
+  });
+
+  const deleteMerch = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('merchandise')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['creator-merch'] });
+      toast.success('Item deleted');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to delete item');
+    }
+  });
+
+  const resetForm = () => {
+    setFormData({ name: '', price: '', description: '', stock: '', image_url: '', fulfillment_by: 'creator' });
+    setEditingItem(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.price) {
       toast.error('Name and Price are required');
       return;
     }
-    createMerch.mutate(formData);
+
+    if (editingItem) {
+      updateMerch.mutate({ ...formData, id: editingItem.id });
+    } else {
+      createMerch.mutate(formData);
+    }
+  };
+
+  const handleEdit = (item: any) => {
+    setEditingItem(item);
+    setFormData({
+      name: item.name,
+      price: item.price.toString(),
+      description: item.description || '',
+      stock: item.stock.toString(),
+      image_url: item.images?.[0] || '',
+      fulfillment_by: item.fulfillment_by || 'creator'
+    });
+    setIsDialogOpen(true);
   };
 
   return (
@@ -105,8 +177,8 @@ const CreatorStore = () => {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add New Item</DialogTitle>
-                <DialogDescription>Create a new item for your supporters to buy.</DialogDescription>
+                <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
+                <DialogDescription>{editingItem ? 'Update your item details.' : 'Create a new item for your supporters to buy.'}</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 pt-4">
                 <div className="space-y-2">
@@ -153,15 +225,24 @@ const CreatorStore = () => {
                     placeholder="Describe your item..."
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image_url">Image URL</Label>
-                  <Input
-                    id="image_url"
-                    value={formData.image_url}
-                    onChange={e => setFormData({ ...formData, image_url: e.target.value })}
-                    placeholder="https://example.com/product-image.jpg"
-                  />
-                  <p className="text-xs text-muted-foreground">Paste a link to your product image</p>
+                <div className="space-y-4">
+                  <Label>Product Image</Label>
+                  <div className="flex flex-col md:flex-row gap-4 items-start">
+                    <ImageUpload
+                      bucket="products"
+                      currentUrl={formData.image_url}
+                      onUploadComplete={(url) => setFormData({ ...formData, image_url: url })}
+                    />
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor="image_url" className="text-xs text-muted-foreground italic">Or direct Image URL</Label>
+                      <Input
+                        id="image_url"
+                        value={formData.image_url}
+                        onChange={e => setFormData({ ...formData, image_url: e.target.value })}
+                        placeholder="https://example.com/product-image.jpg"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-start space-x-3 p-3 rounded-lg border bg-secondary/20">
                   <Checkbox
@@ -182,8 +263,8 @@ const CreatorStore = () => {
                   </div>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <Button type="submit" disabled={createMerch.isPending}>
-                    {createMerch.isPending ? 'Saving...' : 'Create Item'}
+                  <Button type="submit" disabled={createMerch.isPending || updateMerch.isPending}>
+                    {createMerch.isPending || updateMerch.isPending ? 'Saving...' : (editingItem ? 'Save Changes' : 'Create Item')}
                   </Button>
                 </div>
               </form>
@@ -245,10 +326,24 @@ const CreatorStore = () => {
                 <CardContent className="p-4 pt-0 text-sm text-muted-foreground flex justify-between items-center">
                   <span>Stock: {item.stock}</span>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleEdit(item)}
+                    >
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        if (confirm('Delete this item?')) {
+                          deleteMerch.mutate(item.id);
+                        }
+                      }}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>

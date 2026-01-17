@@ -18,7 +18,7 @@ const CreatorDonations = () => {
       if (!creator) return [];
       const { data, error } = await supabase
         .from('donations')
-        .select('*')
+        .select('id, donor_name, amount, creator_amount, message, created_at, status, is_anonymous')
         .eq('creator_id', creator.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -62,10 +62,9 @@ const CreatorDonations = () => {
                   {donations?.map((donation) => (
                     <TableRow key={donation.id}>
                       <TableCell>
-                        <p className="font-medium">{donation.donor_name || 'Anonymous'}</p>
-                        {donation.donor_phone && (
-                          <p className="text-xs text-muted-foreground">{donation.donor_phone}</p>
-                        )}
+                        <p className="font-medium text-sm">
+                          {donation.is_anonymous ? 'Anonymous' : (donation.donor_name || 'Someone')}
+                        </p>
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate text-muted-foreground">
                         {donation.message || '-'}

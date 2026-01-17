@@ -1,18 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Heart, Users, ShoppingBag, Ticket, ArrowRight, Sparkles, Shield, Zap } from "lucide-react";
+import { Heart, Users, ShoppingBag, Ticket, ArrowRight, Sparkles, Shield, Zap, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import heroImage from "@/assets/hero-image.jpg";
 import creator1 from "@/assets/creator-1.jpg";
 import creator2 from "@/assets/creator-2.jpg";
 import creator3 from "@/assets/creator-3.jpg";
 
-const HeroSection = () => (
+const HeroSection = ({ stats, isLoading }: { stats: any, isLoading: boolean }) => (
   <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
     {/* Background Elements */}
     <div className="absolute inset-0 gradient-hero" />
     <div className="absolute top-20 right-10 w-64 h-64 bg-terracotta/10 organic-blob animate-float" />
     <div className="absolute bottom-20 left-10 w-48 h-48 bg-sage/10 organic-blob-2 animate-float" style={{ animationDelay: '2s' }} />
-    
+
     <div className="container mx-auto px-4 relative z-10">
       <div className="grid lg:grid-cols-2 gap-12 items-center">
         <div className="space-y-8 animate-slide-up">
@@ -25,7 +27,7 @@ const HeroSection = () => (
             <span className="text-gradient">Family</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-lg leading-relaxed">
-            Accept donations via M-PESA, sell merchandise, and host events. 
+            Accept donations via M-PESA, sell merchandise, and host events.
             Build a community that supports your creative journey.
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
@@ -40,23 +42,29 @@ const HeroSection = () => (
             </Button>
           </div>
           <div className="flex items-center gap-8 pt-4">
-            <div className="text-center">
-              <div className="font-display text-3xl font-bold text-foreground">5,000+</div>
-              <div className="text-sm text-muted-foreground">Creators</div>
-            </div>
-            <div className="w-px h-12 bg-border" />
-            <div className="text-center">
-              <div className="font-display text-3xl font-bold text-foreground">KSh 50M+</div>
-              <div className="text-sm text-muted-foreground">Earned</div>
-            </div>
-            <div className="w-px h-12 bg-border" />
-            <div className="text-center">
-              <div className="font-display text-3xl font-bold text-foreground">100K+</div>
-              <div className="text-sm text-muted-foreground">Supporters</div>
-            </div>
+            {isLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="text-center">
+                  <div className="font-display text-3xl font-bold text-foreground">{stats?.creators || '7,000+'}</div>
+                  <div className="text-sm text-muted-foreground">Creators</div>
+                </div>
+                <div className="w-px h-12 bg-border" />
+                <div className="text-center">
+                  <div className="font-display text-3xl font-bold text-foreground">{stats?.earned || 'KSh 50M+'}</div>
+                  <div className="text-sm text-muted-foreground">Earned</div>
+                </div>
+                <div className="w-px h-12 bg-border" />
+                <div className="text-center">
+                  <div className="font-display text-3xl font-bold text-foreground">{stats?.supporters || '100K+'}</div>
+                  <div className="text-sm text-muted-foreground">Supporters</div>
+                </div>
+              </>
+            )}
           </div>
         </div>
-        
+
         <div className="relative hidden lg:block">
           <div className="relative z-10 rounded-3xl overflow-hidden shadow-elevated hover-lift">
             <img src={heroImage} alt="African creators community" className="w-full h-auto" />
@@ -80,7 +88,7 @@ const FeaturesSection = () => (
           From donations to merchandise to live events — we've got you covered.
         </p>
       </div>
-      
+
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
           {
@@ -140,7 +148,7 @@ const CreatorsShowcase = () => (
           Join thousands of African creators building thriving communities.
         </p>
       </div>
-      
+
       <div className="grid md:grid-cols-3 gap-8">
         {[
           {
@@ -197,7 +205,7 @@ const CreatorsShowcase = () => (
           </Link>
         ))}
       </div>
-      
+
       <div className="text-center mt-12">
         <Button variant="outline-warm" size="lg" asChild>
           <Link to="/explore" className="gap-2">
@@ -221,7 +229,7 @@ const HowItWorks = () => (
           Get started in minutes. Start earning today.
         </p>
       </div>
-      
+
       <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
         {[
           {
@@ -295,7 +303,7 @@ const CTASection = () => (
       <div className="gradient-warm rounded-3xl p-12 md:p-16 text-center relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary-foreground/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary-foreground/10 rounded-full blur-3xl" />
-        
+
         <div className="relative z-10 max-w-2xl mx-auto">
           <h2 className="font-display text-4xl md:text-5xl font-bold text-primary-foreground mb-6">
             Ready to Build Your Tribe?
@@ -316,9 +324,23 @@ const CTASection = () => (
 );
 
 const Index = () => {
+  const { data: heroStats, isLoading } = useQuery({
+    queryKey: ['hero-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'hero_stats')
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.value as any;
+    }
+  });
+
   return (
     <>
-      <HeroSection />
+      <HeroSection stats={heroStats} isLoading={isLoading} />
       <FeaturesSection />
       <CreatorsShowcase />
       <HowItWorks />

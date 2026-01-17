@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useMyCreator } from '@/hooks/useCreator';
 
 interface NavItem {
   label: string;
@@ -76,6 +77,7 @@ const creatorNavItems: NavItem[] = [
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, type }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, signOut, isAdmin } = useAuth();
+  const { data: creator } = useMyCreator();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -106,9 +108,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, type }) => 
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
               <Avatar className="w-8 h-8">
-                <AvatarImage src="" />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                  {user?.email?.charAt(0).toUpperCase()}
+                <AvatarImage src={creator?.avatar_url || ''} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                  {(creator?.display_name || user?.email)?.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -210,14 +212,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, type }) => 
               <DropdownMenuTrigger asChild>
                 <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-secondary transition-colors">
                   <Avatar className="w-9 h-9">
-                    <AvatarImage src="" />
+                    <AvatarImage src={creator?.avatar_url || ''} />
                     <AvatarFallback className="bg-primary text-primary-foreground">
-                      {user?.email?.charAt(0).toUpperCase()}
+                      {(creator?.display_name || user?.email)?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-foreground truncate">
-                      {user?.email}
+                      {creator?.display_name || user?.email}
                     </p>
                     <p className="text-xs text-muted-foreground capitalize">{type}</p>
                   </div>

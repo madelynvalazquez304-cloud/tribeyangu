@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Save, Palette } from 'lucide-react';
+import { Loader2, Save, Palette, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import ImageUpload from '@/components/ImageUpload';
 
 const CreatorCustomize = () => {
   const queryClient = useQueryClient();
@@ -81,27 +82,25 @@ const CreatorCustomize = () => {
                   onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="avatar_url">Profile Photo URL</Label>
-                <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary flex-shrink-0">
-                    {formData.avatar_url ? (
-                      <img src={formData.avatar_url} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                        {formData.display_name?.charAt(0) || '?'}
-                      </div>
-                    )}
-                  </div>
-                  <Input
-                    id="avatar_url"
-                    value={formData.avatar_url}
-                    onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
-                    placeholder="https://example.com/photo.jpg"
-                    className="flex-1"
+              <div className="space-y-4">
+                <Label>Profile Photo</Label>
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  <ImageUpload
+                    bucket="avatars"
+                    currentUrl={formData.avatar_url}
+                    onUploadComplete={(url) => setFormData({ ...formData, avatar_url: url })}
                   />
+                  <div className="flex-1 space-y-2">
+                    <Label htmlFor="avatar_url" className="text-xs text-muted-foreground italic">Or provide a direct image URL</Label>
+                    <Input
+                      id="avatar_url"
+                      value={formData.avatar_url}
+                      onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+                      placeholder="https://example.com/photo.jpg"
+                    />
+                    <p className="text-xs text-muted-foreground">Linking from external sites is still supported.</p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">Link to your profile picture (e.g. from Google Drive, Dropbox, or other host)</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tribe_name">Tribe Name</Label>

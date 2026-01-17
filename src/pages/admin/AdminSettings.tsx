@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Percent, DollarSign, Wallet, Truck, AlertCircle } from 'lucide-react';
+import { Loader2, Save, Percent, DollarSign, Wallet, Truck, AlertCircle, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Json } from '@/integrations/supabase/types';
 
@@ -29,7 +29,7 @@ const AdminSettings = () => {
       const { data, error } = await supabase
         .from('platform_settings')
         .select('*');
-      
+
       if (error) throw error;
       return data as Setting[];
     }
@@ -47,13 +47,13 @@ const AdminSettings = () => {
 
   const updateSettings = useMutation({
     mutationFn: async (updates: Record<string, any>) => {
-      const promises = Object.entries(updates).map(([key, value]) => 
+      const promises = Object.entries(updates).map(([key, value]) =>
         supabase
           .from('platform_settings')
           .update({ value, updated_at: new Date().toISOString() })
           .eq('key', key)
       );
-      
+
       const results = await Promise.all(promises);
       results.forEach(({ error }) => {
         if (error) throw error;
@@ -210,6 +210,57 @@ const AdminSettings = () => {
             </CardContent>
           </Card>
 
+          {/* Hero Stats */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-primary" />
+                Hero Section Stats
+              </CardTitle>
+              <CardDescription>Update the impact numbers shown on the home page</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="stats_creators">Creators Count</Label>
+                  <Input
+                    id="stats_creators"
+                    value={settings.hero_stats?.creators || '5,000+'}
+                    onChange={(e) => {
+                      const newStats = { ...(settings.hero_stats || {}), creators: e.target.value };
+                      handleChange('hero_stats', newStats);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">e.g. 7,000+</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="stats_earned">Total Earned</Label>
+                  <Input
+                    id="stats_earned"
+                    value={settings.hero_stats?.earned || 'KSh 50M+'}
+                    onChange={(e) => {
+                      const newStats = { ...(settings.hero_stats || {}), earned: e.target.value };
+                      handleChange('hero_stats', newStats);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">e.g. KSh 100M+</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="stats_supporters">Supporters Count</Label>
+                  <Input
+                    id="stats_supporters"
+                    value={settings.hero_stats?.supporters || '100K+'}
+                    onChange={(e) => {
+                      const newStats = { ...(settings.hero_stats || {}), supporters: e.target.value };
+                      handleChange('hero_stats', newStats);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">e.g. 200K+</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Tax & Shipping */}
           <Card>
             <CardHeader>
@@ -254,7 +305,7 @@ const AdminSettings = () => {
                 <div>
                   <h4 className="font-medium text-foreground">Settings Note</h4>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Changes to fees and limits will apply to new transactions only. 
+                    Changes to fees and limits will apply to new transactions only.
                     Existing pending transactions will use the rates at the time they were created.
                   </p>
                 </div>

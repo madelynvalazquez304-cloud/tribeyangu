@@ -32,7 +32,7 @@ const CreatorDashboard = () => {
       if (!creator) return [];
       const { data, error } = await supabase
         .from('donations')
-        .select('*')
+        .select('id, donor_name, amount, creator_amount, message, created_at, is_anonymous')
         .eq('creator_id', creator.id)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
