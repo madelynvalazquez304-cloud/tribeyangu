@@ -8,7 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Heart, Users, Share2, Check, ExternalLink, Loader2, Phone, AlertCircle, CheckCircle2, XCircle, ShoppingBag, Package } from 'lucide-react';
+import { Heart, Users, Share2, Check, ExternalLink, Loader2, Phone, AlertCircle, CheckCircle2, XCircle, ShoppingBag, Package, Gift as GiftIcon, ShieldCheck, EyeOff, Eye } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import NotFound from './NotFound';
@@ -35,6 +38,10 @@ const CreatorPage = () => {
   const [recordId, setRecordId] = useState('');
   const { addItem } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('support');
+  const [isAnonymousGift, setIsAnonymousGift] = useState(false);
+  const [selectedGiftId, setSelectedGiftId] = useState<string | null>(null);
+  const [currentTxType, setCurrentTxType] = useState<'donation' | 'gift'>('donation');
 
   const { data: creator, isLoading, error } = useQuery({
     queryKey: ['creator', username],
@@ -107,60 +114,98 @@ const CreatorPage = () => {
     enabled: !!creator
   });
 
+  const { data: availableGifts } = useQuery({
+    queryKey: ['available-gifts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('gifts')
+        .select('*')
+        .eq('is_active', true)
+        .order('price', { ascending: true });
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const { data: recentGifts } = useQuery({
+    queryKey: ['recent-gifts', creator?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('received_gifts')
+        .select(`
+          *,
+          gift:gifts(name, icon_url)
+        `)
+        .eq('creator_id', creator!.id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(6);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!creator
+  });
+
   const initiateDonation = useMutation({
     mutationFn: async () => {
       const amount = customAmount ? parseInt(customAmount) : selectedAmount;
       if (!amount || amount < 10) throw new Error('Minimum amount is KSh 10');
       if (!phoneNumber) throw new Error('Phone number is required');
-      // Quick env check (helps diagnose missing config in deployments)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-      if (!supabaseUrl) {
-        throw new Error('Supabase URL not configured. Check VITE_SUPABASE_URL in your environment.')
-      }
 
-      try {
-        const response = await supabase.functions.invoke('mpesa-stk', {
-          body: {
-            phone: phoneNumber,
-            amount,
-            creatorId: creator!.id,
-            donorName: donorName || undefined,
-            message: message || undefined,
-            type: 'donation'
-          }
-        });
-
-        // Low-level invoke error (network / auth / not found)
-        if ((response as any).error) {
-          console.error('Supabase function invoke error:', (response as any).error);
-          const errMsg = ((response as any).error?.message) || 'Failed to invoke payment function';
-          throw new Error(errMsg);
+      const response = await supabase.functions.invoke('mpesa-stk', {
+        body: {
+          phone: phoneNumber,
+          amount,
+          creatorId: creator!.id,
+          donorName: donorName || undefined,
+          message: message || undefined,
+          type: 'donation'
         }
+      });
 
-        // Function executed but returned a domain-level error
-        if (!response.data?.success) {
-          console.error('STK push returned non-success:', response.data);
-          const apiErr = response.data?.error || 'STK Push failed';
-          throw new Error(apiErr);
-        }
-
-        return response.data;
-      } catch (err: any) {
-        console.error('STK invocation failed:', err);
-        let message = err?.message || String(err);
-        if (message.includes('Failed to fetch')) {
-          message = 'Network error: cannot reach Supabase Functions. Check your SUPABASE URL and network connectivity.';
-        } else if (/not found/i.test(message) || /404/.test(message)) {
-          message = 'Payment function not found. Has the Supabase Edge Function "mpesa-stk" been deployed?';
-        } else if (/401|403/.test(message)) {
-          message = 'Authorization error calling payment function. Check your Supabase keys and function permissions.';
-        }
-        throw new Error(message);
-      }
+      if (response.error) throw response.error;
+      if (!response.data?.success) throw new Error(response.data?.error || 'STK Push failed');
+      return response.data;
     },
     onSuccess: (data) => {
       setCheckoutRequestId(data.checkoutRequestId);
       setRecordId(data.recordId);
+      setCurrentTxType('donation');
+      setPaymentStatus('polling');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+      setPaymentStatus('idle');
+      setPaymentDialog(false);
+    }
+  });
+
+  const initiateGift = useMutation({
+    mutationFn: async (gift: any) => {
+      if (!phoneNumber) throw new Error('Phone number is required');
+
+      const response = await supabase.functions.invoke('mpesa-stk', {
+        body: {
+          phone: phoneNumber,
+          amount: gift.price,
+          creatorId: creator!.id,
+          donorName: donorName || undefined,
+          type: 'gift',
+          referenceId: gift.id,
+          metadata: {
+            is_anonymous: isAnonymousGift
+          }
+        }
+      });
+
+      if (response.error) throw response.error;
+      if (!response.data?.success) throw new Error(response.data?.error || 'STK Push failed');
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setCheckoutRequestId(data.checkoutRequestId);
+      setRecordId(data.recordId);
+      setCurrentTxType('gift');
       setPaymentStatus('polling');
     },
     onError: (error: Error) => {
@@ -177,7 +222,7 @@ const CreatorPage = () => {
     const pollInterval = setInterval(async () => {
       try {
         const response = await supabase.functions.invoke('check-payment', {
-          body: { recordId, type: 'donation' }
+          body: { recordId, type: currentTxType }
         });
 
         if ((response as any).error) {
@@ -212,7 +257,7 @@ const CreatorPage = () => {
       clearInterval(pollInterval);
       clearTimeout(timeout);
     };
-  }, [paymentStatus, recordId]);
+  }, [paymentStatus, recordId, currentTxType]);
 
   const handleDonate = () => {
     const amount = customAmount ? parseInt(customAmount) : selectedAmount;
@@ -495,6 +540,29 @@ const CreatorPage = () => {
                 </Card>
               )}
 
+              {/* Recent Gifts */}
+              {recentGifts && recentGifts.length > 0 && (
+                <Card className="shadow-sm border-none bg-card/60 backdrop-blur-sm">
+                  <CardContent className="p-6">
+                    <h2 className="font-semibold mb-4 flex items-center gap-2">
+                      <GiftIcon className="w-5 h-5 text-primary" />
+                      Recent Gifts
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {recentGifts.map((received, i) => (
+                        <div key={i} className="flex flex-col items-center p-3 rounded-xl bg-secondary/30 text-center animate-in fade-in zoom-in duration-300">
+                          <span className="text-3xl mb-1">{(received.gift as any)?.icon_url}</span>
+                          <span className="text-[10px] font-bold text-primary uppercase">{(received.gift as any)?.name}</span>
+                          <span className="text-[10px] text-muted-foreground mt-1 truncate w-full">
+                            From {received.is_anonymous ? 'Anonymous' : (received.sender_name || 'Someone')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Recent Supporters */}
               {recentDonations && recentDonations.length > 0 && (
                 <Card>
@@ -528,47 +596,141 @@ const CreatorPage = () => {
               <div className="sticky top-24">
                 <Card className="shadow-lg overflow-hidden">
                   <div className="h-2" style={{ backgroundColor: creator.theme_primary }} />
-                  <CardContent className="p-6">
-                    <div className="text-center mb-6">
-                      <div className="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: creator.theme_primary }}>
-                        <Heart className="w-7 h-7 text-white" />
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 mb-6">
+                      <TabsTrigger value="support" className="gap-2">
+                        <Heart className="w-4 h-4" /> Support
+                      </TabsTrigger>
+                      <TabsTrigger value="gifts" className="gap-2">
+                        <GiftIcon className="w-4 h-4" /> Gifts
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="support" className="space-y-4">
+                      <div className="text-center mb-6">
+                        <h2 className="font-display text-xl font-bold">
+                          Support {creator.display_name.split(' ')[0]}
+                        </h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Your support means everything
+                        </p>
                       </div>
-                      <h2 className="font-display text-xl font-bold">
-                        Support {creator.display_name.split(' ')[0]}
-                      </h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Your support means everything
-                      </p>
-                    </div>
 
-                    {/* Amount Selection */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      {donationAmounts.map((amount) => (
-                        <button
-                          key={amount}
-                          onClick={() => { setSelectedAmount(amount); setCustomAmount(''); }}
-                          className={`py-3 px-4 rounded-xl font-semibold transition-all ${selectedAmount === amount
-                            ? 'text-white shadow-lg'
-                            : 'bg-secondary text-foreground hover:bg-secondary/80'
-                            }`}
-                          style={selectedAmount === amount ? { backgroundColor: creator.theme_primary } : undefined}
-                        >
-                          KSh {amount}
-                        </button>
-                      ))}
-                    </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {donationAmounts.map((amount) => (
+                          <button
+                            key={amount}
+                            onClick={() => { setSelectedAmount(amount); setCustomAmount(''); }}
+                            className={`py-3 px-4 rounded-xl font-semibold transition-all ${selectedAmount === amount
+                              ? 'text-white shadow-lg'
+                              : 'bg-secondary text-foreground hover:bg-secondary/80'
+                              }`}
+                            style={selectedAmount === amount ? { backgroundColor: creator.theme_primary } : undefined}
+                          >
+                            KSh {amount}
+                          </button>
+                        ))}
+                      </div>
 
-                    {/* Custom Amount */}
-                    <Input
-                      type="number"
-                      placeholder="Custom amount (KSh)"
-                      value={customAmount}
-                      onChange={(e) => { setCustomAmount(e.target.value); setSelectedAmount(null); }}
-                      className="mb-3"
-                    />
+                      <Input
+                        type="number"
+                        placeholder="Custom amount (KSh)"
+                        value={customAmount}
+                        onChange={(e) => { setCustomAmount(e.target.value); setSelectedAmount(null); }}
+                      />
 
-                    {/* Phone Number */}
-                    <div className="relative mb-3">
+                      <Textarea
+                        placeholder="Leave a message... 💚 (optional)"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        rows={3}
+                      />
+
+                      <Button
+                        className="w-full gap-2 text-white"
+                        size="lg"
+                        style={{ backgroundColor: creator.theme_primary }}
+                        onClick={handleDonate}
+                        disabled={initiateDonation.isPending}
+                      >
+                        {initiateDonation.isPending ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Heart className="w-5 h-5" />
+                        )}
+                        Support with KSh {customAmount || selectedAmount || 0}
+                      </Button>
+                    </TabsContent>
+
+                    <TabsContent value="gifts" className="space-y-4">
+                      <div className="text-center mb-6">
+                        <h2 className="font-display text-xl font-bold">
+                          Send a Gift
+                        </h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Surprise {creator.display_name.split(' ')[0]} with a gift!
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        {availableGifts?.map((gift) => (
+                          <button
+                            key={gift.id}
+                            onClick={() => setSelectedGiftId(gift.id)}
+                            className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${selectedGiftId === gift.id
+                              ? 'border-primary bg-primary/5'
+                              : 'border-transparent bg-secondary/50 hover:bg-secondary'
+                              }`}
+                          >
+                            <span className="text-2xl">{gift.icon_url}</span>
+                            <span className="text-[10px] font-bold truncate w-full text-center">{gift.name}</span>
+                            <span className="text-[10px] text-primary font-bold">KSh {gift.price}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center space-x-2 p-3 rounded-lg bg-secondary/30">
+                        <Checkbox
+                          id="anon-gift"
+                          checked={isAnonymousGift}
+                          onCheckedChange={(checked) => setIsAnonymousGift(!!checked)}
+                        />
+                        <Label htmlFor="anon-gift" className="text-sm cursor-pointer flex items-center gap-2">
+                          {isAnonymousGift ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          Send as Anonymous
+                        </Label>
+                      </div>
+
+                      <Button
+                        className="w-full gap-2 text-white"
+                        size="lg"
+                        style={{ backgroundColor: creator.theme_primary }}
+                        disabled={!selectedGiftId || initiateGift.isPending}
+                        onClick={() => {
+                          const gift = availableGifts?.find(g => g.id === selectedGiftId);
+                          if (gift) {
+                            if (!phoneNumber) {
+                              toast.error('Please enter your M-PESA number');
+                              return;
+                            }
+                            setPaymentDialog(true);
+                            setPaymentStatus('processing');
+                            initiateGift.mutate(gift);
+                          }
+                        }}
+                      >
+                        {initiateGift.isPending ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <GiftIcon className="w-5 h-5" />
+                        )}
+                        Send Gift
+                      </Button>
+                    </TabsContent>
+                  </Tabs>
+
+                  <div className="mt-6 space-y-4 pt-6 border-t">
+                    <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         type="tel"
@@ -579,43 +741,16 @@ const CreatorPage = () => {
                       />
                     </div>
 
-                    {/* Name */}
                     <Input
                       placeholder="Your name (optional)"
                       value={donorName}
                       onChange={(e) => setDonorName(e.target.value)}
-                      className="mb-3"
                     />
+                  </div>
 
-                    {/* Message */}
-                    <Textarea
-                      placeholder="Leave a message... 💚 (optional)"
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      rows={3}
-                      className="mb-4"
-                    />
-
-                    {/* Submit */}
-                    <Button
-                      className="w-full gap-2 text-white"
-                      size="lg"
-                      style={{ backgroundColor: creator.theme_primary }}
-                      onClick={handleDonate}
-                      disabled={initiateDonation.isPending}
-                    >
-                      {initiateDonation.isPending ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Heart className="w-5 h-5" />
-                      )}
-                      Support with KSh {customAmount || selectedAmount || 0}
-                    </Button>
-
-                    <p className="text-xs text-center text-muted-foreground mt-4">
-                      Secure payment via M-PESA STK Push
-                    </p>
-                  </CardContent>
+                  <p className="text-xs text-center text-muted-foreground mt-4">
+                    Secure payment via M-PESA STK Push
+                  </p>
                 </Card>
               </div>
             </div>
