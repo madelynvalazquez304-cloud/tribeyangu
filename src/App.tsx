@@ -42,6 +42,7 @@ import CreatorCustomize from "./pages/creator/CreatorCustomize";
 import CreatorSettings from "./pages/creator/CreatorSettings";
 import CreatorStore from "./pages/creator/CreatorStore";
 import CreatorEvents from "./pages/creator/CreatorEvents";
+import CreatorCampaigns from "./pages/creator/CreatorCampaigns";
 
 // Support & legal
 import Support from "./pages/Support";
@@ -163,6 +164,11 @@ const App = () => (
                 <Route path="/dashboard/events" element={
                   <ProtectedRoute requiredRole="creator">
                     <CreatorEvents />
+                  </ProtectedRoute>
+                } />
+                <Route path="/dashboard/campaigns" element={
+                  <ProtectedRoute requiredRole="creator">
+                    <CreatorCampaigns />
                   </ProtectedRoute>
                 } />
                 <Route path="/dashboard/customize" element={

@@ -334,7 +334,7 @@ const Index = () => {
         .maybeSingle();
 
       if (error) throw error;
-      return data?.value as any;
+      return data?.value ?? null;
     }
   });
 

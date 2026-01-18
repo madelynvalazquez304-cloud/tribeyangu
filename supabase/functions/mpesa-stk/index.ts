@@ -15,6 +15,7 @@ interface STKPushRequest {
   message?: string;
   type: 'donation' | 'vote' | 'merchandise' | 'gift';
   referenceId?: string;
+  campaignId?: string;
   metadata?: any;
 }
 
@@ -36,7 +37,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: STKPushRequest = await req.json();
-    const { phone, amount, creatorId, donorName, message, type, referenceId, metadata } = body;
+    const { phone, amount, creatorId, donorName, message, type, referenceId, campaignId, metadata } = body;
 
     // Get active M-PESA config
     console.log('Fetching M-PESA config...');
@@ -122,6 +123,7 @@ serve(async (req) => {
         .from('donations')
         .insert({
           creator_id: creatorId,
+          campaign_id: campaignId || metadata?.campaignId || null,
           amount,
           donor_name: donorName || null,
           donor_phone: formattedPhone,
@@ -248,7 +250,7 @@ serve(async (req) => {
       PhoneNumber: formattedPhone,
       CallBackURL: callbackUrl,
       AccountReference: `TY${recordId.slice(0, 8)}`,
-      TransactionDesc: type === 'donation' ? 'TribeYangu Donation' : (type === 'vote' ? 'TribeYangu Vote' : (type === 'gift' ? 'TribeYangu Gift' : 'TribeYangu Order'))
+      TransactionDesc: (campaignId || metadata?.campaignId) ? 'Campaign Support' : (type === 'donation' ? 'TribeYangu Donation' : (type === 'vote' ? 'TribeYangu Vote' : (type === 'gift' ? 'TribeYangu Gift' : 'TribeYangu Order')))
     };
 
     const stkResponse = await fetch(`${baseUrl}/mpesa/stkpush/v1/processrequest`, {

@@ -11,6 +11,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Save, Palette, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const CreatorCustomize = () => {
   const queryClient = useQueryClient();
@@ -22,7 +29,8 @@ const CreatorCustomize = () => {
     avatar_url: creator?.avatar_url || '',
     theme_primary: creator?.theme_primary || '#E07B4C',
     theme_secondary: creator?.theme_secondary || '#8B9A6B',
-    theme_accent: creator?.theme_accent || '#D4A853'
+    theme_accent: creator?.theme_accent || '#D4A853',
+    featured_section: (creator as any)?.featured_section || 'donations'
   });
 
   React.useEffect(() => {
@@ -34,7 +42,8 @@ const CreatorCustomize = () => {
         avatar_url: creator.avatar_url || '',
         theme_primary: creator.theme_primary || '#E07B4C',
         theme_secondary: creator.theme_secondary || '#8B9A6B',
-        theme_accent: creator.theme_accent || '#D4A853'
+        theme_accent: creator.theme_accent || '#D4A853',
+        featured_section: (creator as any).featured_section || 'donations'
       });
     }
   }, [creator]);
@@ -120,6 +129,26 @@ const CreatorCustomize = () => {
                   rows={4}
                   placeholder="Tell your fans about yourself..."
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="featured_section">Featured Section</Label>
+                <Select
+                  value={formData.featured_section}
+                  onValueChange={(value) => setFormData({ ...formData, featured_section: value })}
+                >
+                  <SelectTrigger id="featured_section">
+                    <SelectValue placeholder="Select featured section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="donations">Support & Donations</SelectItem>
+                    <SelectItem value="gifts">Virtual Gifting</SelectItem>
+                    <SelectItem value="store">Merchandise Store</SelectItem>
+                    <SelectItem value="campaigns">Crowdfunding Campaign</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This section will be displayed prominently next to your profile.
+                </p>
               </div>
             </CardContent>
           </Card>

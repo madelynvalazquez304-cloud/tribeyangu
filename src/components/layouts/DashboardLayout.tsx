@@ -25,7 +25,8 @@ import {
   Palette,
   Wallet,
   FolderKanban,
-  Gift
+  Gift,
+  Target
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -68,6 +69,7 @@ const creatorNavItems: NavItem[] = [
   { label: 'Withdrawals', href: '/dashboard/withdrawals', icon: Wallet },
   { label: 'Events', href: '/dashboard/events', icon: Ticket },
   { label: 'Store', href: '/dashboard/store', icon: ShoppingBag },
+  { label: 'Campaigns', href: '/dashboard/campaigns', icon: Target },
   { label: 'Links', href: '/dashboard/links', icon: LinkIcon },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { label: 'Customize', href: '/dashboard/customize', icon: Palette },

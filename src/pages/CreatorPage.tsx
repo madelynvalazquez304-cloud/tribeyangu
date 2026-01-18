@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Heart, Users, Share2, Check, ExternalLink, Loader2, Phone, AlertCircle, CheckCircle2, XCircle, ShoppingBag, Package, Gift as GiftIcon, ShieldCheck, EyeOff, Eye } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Heart, Users, Share2, Check, ExternalLink, Loader2, Phone, AlertCircle, CheckCircle2, XCircle, ShoppingBag, Package, Gift as GiftIcon, ShieldCheck, EyeOff, Eye, Target, Plus } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -41,7 +42,8 @@ const CreatorPage = () => {
   const [activeTab, setActiveTab] = useState('support');
   const [isAnonymousGift, setIsAnonymousGift] = useState(false);
   const [selectedGiftId, setSelectedGiftId] = useState<string | null>(null);
-  const [currentTxType, setCurrentTxType] = useState<'donation' | 'gift'>('donation');
+  const [currentTxType, setCurrentTxType] = useState<'donation' | 'gift' | 'campaign'>('donation');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const { data: creator, isLoading, error } = useQuery({
     queryKey: ['creator', username],
@@ -60,6 +62,12 @@ const CreatorPage = () => {
     },
     enabled: !!username
   });
+
+  useEffect(() => {
+    if ((creator as any)?.featured_section) {
+      setActiveTab((creator as any).featured_section);
+    }
+  }, [creator]);
 
   const isOwner = !!user && !!creator && user.id === creator.user_id;
 
@@ -146,6 +154,21 @@ const CreatorPage = () => {
     enabled: !!creator
   });
 
+  const { data: campaigns } = useQuery({
+    queryKey: ['creator-campaigns-public', creator?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('campaigns' as any)
+        .select('*')
+        .eq('creator_id', creator!.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!creator
+  });
+
   const initiateDonation = useMutation({
     mutationFn: async () => {
       const amount = customAmount ? parseInt(customAmount) : selectedAmount;
@@ -206,6 +229,39 @@ const CreatorPage = () => {
       setCheckoutRequestId(data.checkoutRequestId);
       setRecordId(data.recordId);
       setCurrentTxType('gift');
+      setPaymentStatus('polling');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+      setPaymentStatus('idle');
+      setPaymentDialog(false);
+    }
+  });
+
+  const initiateCampaignDonation = useMutation({
+    mutationFn: async ({ amount, campaignId }: { amount: number, campaignId: string }) => {
+      if (!phoneNumber) throw new Error('Phone number is required');
+
+      const response = await supabase.functions.invoke('mpesa-stk', {
+        body: {
+          phone: phoneNumber,
+          amount,
+          creatorId: creator!.id,
+          campaignId,
+          donorName: donorName || undefined,
+          message: message || undefined,
+          type: 'donation'
+        }
+      });
+
+      if (response.error) throw response.error;
+      if (!response.data?.success) throw new Error(response.data?.error || 'STK Push failed');
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setCheckoutRequestId(data.checkoutRequestId);
+      setRecordId(data.recordId);
+      setCurrentTxType('donation'); // Using donation as tx type for checking payment
       setPaymentStatus('polling');
     },
     onError: (error: Error) => {
@@ -323,6 +379,10 @@ const CreatorPage = () => {
     return <NotFound />;
   }
 
+  // Safe display name helpers to avoid runtime errors when fields are null/undefined
+  const safeDisplayName = creator.display_name || creator.username || 'Creator';
+  const safeFirstName = (safeDisplayName.split(' ')[0]) || safeDisplayName;
+
   // Apply creator theme
   const themeStyles = {
     '--creator-primary': creator.theme_primary || '#E07B4C',
@@ -395,10 +455,10 @@ const CreatorPage = () => {
                     <div className="relative flex-shrink-0">
                       <div className="w-24 h-24 md:w-32 md:h-32 rounded-2xl overflow-hidden bg-primary/10 shadow-lg">
                         {creator.avatar_url ? (
-                          <img src={creator.avatar_url} alt={creator.display_name} className="w-full h-full object-cover" />
+                          <img src={creator.avatar_url} alt={safeDisplayName} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-primary">
-                            {creator.display_name.charAt(0)}
+                            {safeDisplayName.charAt(0)}
                           </div>
                         )}
                       </div>
@@ -481,13 +541,67 @@ const CreatorPage = () => {
                 </Card>
               )}
 
+              {/* Crowdfunding Campaigns */}
+              {campaigns && campaigns.length > 0 && (
+                <div className="space-y-4">
+                  <h2 className="font-semibold px-2 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-primary" />
+                    Active Campaigns
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {campaigns.map((campaign) => {
+                      const progress = Math.min(100, (campaign.current_amount / campaign.goal_amount) * 100);
+                      return (
+                        <Card key={campaign.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                          <div className="aspect-video bg-secondary relative overflow-hidden">
+                            {campaign.image_url ? (
+                              <img src={campaign.image_url} alt={campaign.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Target className="w-12 h-12 text-muted-foreground/30" />
+                              </div>
+                            )}
+                          </div>
+                          <CardContent className="p-4 space-y-3">
+                            <h3 className="font-bold text-lg line-clamp-1">{campaign.title}</h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2 min-h-[40px]">
+                              {campaign.description || "No description provided."}
+                            </p>
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs font-semibold">
+                                <span>KES {Number(campaign.current_amount).toLocaleString()}</span>
+                                <span className="text-muted-foreground">Goal: KES {Number(campaign.goal_amount).toLocaleString()}</span>
+                              </div>
+                              <Progress value={progress} className="h-1.5" />
+                              <p className="text-[10px] text-muted-foreground text-right">{Math.round(progress)}% raised</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              variant="outline"
+                              onClick={() => {
+                                setActiveTab('campaigns');
+                                setSelectedCampaignId(campaign.id);
+                                scrollToSupport();
+                              }}
+                            >
+                              Support Campaign
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Store */}
               {merchandise && merchandise.length > 0 && (
-                <Card className="shadow-sm border-none bg-card/60 backdrop-blur-sm">
+                <Card className="shadow-sm border-none bg-card/60 backdrop-blur-sm" id="store-section">
                   <CardContent className="p-6">
                     <h2 className="font-semibold mb-4 flex items-center gap-2">
                       <ShoppingBag className="w-5 h-5 text-primary" />
-                      {creator.display_name.split(' ')[0]}'s Store
+                      {safeFirstName}'s Store
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {merchandise.map((item) => (
@@ -604,12 +718,20 @@ const CreatorPage = () => {
                       <TabsTrigger value="gifts" className="gap-2">
                         <GiftIcon className="w-4 h-4" /> Gifts
                       </TabsTrigger>
+                      <TabsTrigger value="store" className="gap-2">
+                        <ShoppingBag className="w-4 h-4" /> Store
+                      </TabsTrigger>
+                      {campaigns && campaigns.length > 0 && (
+                        <TabsTrigger value="campaigns" className="gap-2">
+                          <Target className="w-4 h-4" /> Campaign
+                        </TabsTrigger>
+                      )}
                     </TabsList>
 
                     <TabsContent value="support" className="space-y-4">
                       <div className="text-center mb-6">
                         <h2 className="font-display text-xl font-bold">
-                          Support {creator.display_name.split(' ')[0]}
+                          Support {safeFirstName}
                         </h2>
                         <p className="text-sm text-muted-foreground mt-1">
                           Your support means everything
@@ -668,7 +790,7 @@ const CreatorPage = () => {
                           Send a Gift
                         </h2>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Surprise {creator.display_name.split(' ')[0]} with a gift!
+                          Surprise {safeFirstName} with a gift!
                         </p>
                       </div>
 
@@ -725,6 +847,115 @@ const CreatorPage = () => {
                           <GiftIcon className="w-5 h-5" />
                         )}
                         Send Gift
+                      </Button>
+                    </TabsContent>
+
+                    <TabsContent value="campaigns" className="space-y-4">
+                      {campaigns && campaigns.length > 0 && (
+                        <div className="space-y-4">
+                          <div className="text-center mb-6">
+                            <h2 className="font-display text-xl font-bold">Back this Campaign</h2>
+                            <p className="text-sm text-muted-foreground mt-1">Help {safeFirstName} reach their goal</p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Select Campaign</Label>
+                            <div className="space-y-2">
+                              {campaigns.map(c => (
+                                <div
+                                  key={c.id}
+                                  onClick={() => setSelectedCampaignId(c.id)}
+                                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${selectedCampaignId === c.id ? 'border-primary bg-primary/5' : 'border-transparent bg-secondary/50'}`}
+                                >
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-semibold text-sm">{c.title}</span>
+                                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                                      {Math.round((c.current_amount / c.goal_amount) * 100)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Amount (KES)</Label>
+                            <Input
+                              type="number"
+                              placeholder="Amount to contribute"
+                              value={customAmount}
+                              onChange={(e) => setCustomAmount(e.target.value)}
+                            />
+                          </div>
+
+                          <Button
+                            className="w-full gap-2 text-white"
+                            size="lg"
+                            style={{ backgroundColor: creator.theme_primary }}
+                            disabled={!selectedCampaignId || !customAmount || initiateCampaignDonation.isPending}
+                            onClick={() => {
+                              if (!phoneNumber) {
+                                toast.error('Please enter your M-PESA number');
+                                return;
+                              }
+                              setPaymentDialog(true);
+                              setPaymentStatus('processing');
+                              initiateCampaignDonation.mutate({
+                                amount: parseInt(customAmount),
+                                campaignId: selectedCampaignId!
+                              });
+                            }}
+                          >
+                            {initiateCampaignDonation.isPending ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                              <Target className="w-5 h-5" />
+                            )}
+                            Contribute KSh {customAmount || 0}
+                          </Button>
+                        </div>
+                      )}
+                    </TabsContent>
+                    <TabsContent value="store" className="space-y-4">
+                      <div className="text-center mb-6">
+                        <h2 className="font-display text-xl font-bold">Visit the Store</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Check out my latest merchandise</p>
+                      </div>
+                      <div className="space-y-3">
+                        {merchandise?.slice(0, 3).map(item => (
+                          <div key={item.id} className="flex gap-3 p-2 rounded-lg bg-secondary/30 items-center">
+                            <div className="w-12 h-12 rounded bg-secondary flex-shrink-0 overflow-hidden">
+                              {item.images?.[0] ? (
+                                <img src={item.images[0]} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-6 h-6 m-3 opacity-20" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">{item.name}</p>
+                              <p className="text-xs text-primary font-bold">KES {item.price}</p>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => {
+                              addItem({
+                                id: item.id,
+                                name: item.name,
+                                price: Number(item.price),
+                                quantity: 1,
+                                image: item.images?.[0],
+                                creatorId: creator.id
+                              });
+                              toast.success(`${item.name} added!`);
+                              setIsCartOpen(true);
+                            }}>
+                              <Plus className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Button variant="outline" className="w-full" onClick={() => {
+                        document.getElementById('store-section')?.scrollIntoView({ behavior: 'smooth' });
+                      }}>
+                        View Full Store
                       </Button>
                     </TabsContent>
                   </Tabs>
