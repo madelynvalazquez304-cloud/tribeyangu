@@ -33,7 +33,7 @@ const HeroSection = ({ stats, isLoading }: { stats: any, isLoading: boolean }) =
           <div className="flex flex-col sm:flex-row gap-4">
             <Button variant="hero" size="xl" asChild>
               <Link to="/signup" className="gap-3">
-                Start Your Tribe
+                 Get Started
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </Button>

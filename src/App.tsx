@@ -43,6 +43,7 @@ import CreatorSettings from "./pages/creator/CreatorSettings";
 import CreatorStore from "./pages/creator/CreatorStore";
 import CreatorEvents from "./pages/creator/CreatorEvents";
 import CreatorCampaigns from "./pages/creator/CreatorCampaigns";
+import CreatorAnalytics from "./pages/creator/CreatorAnalytics";
 
 // Support & legal
 import Support from "./pages/Support";
@@ -179,6 +180,11 @@ const App = () => (
                 <Route path="/dashboard/settings" element={
                   <ProtectedRoute requiredRole="creator">
                     <CreatorSettings />
+                  </ProtectedRoute>
+                } />
+                <Route path="/dashboard/analytics" element={
+                  <ProtectedRoute requiredRole="creator">
+                    <CreatorAnalytics />
                   </ProtectedRoute>
                 } />
 
