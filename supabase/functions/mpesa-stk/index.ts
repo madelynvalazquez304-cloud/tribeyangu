@@ -286,16 +286,22 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     } else {
-      // Delete the pending record
+      // STK Push failed. Instead of deleting the pending record, mark it as failed so we can debug and reconcile.
       let table = 'donations';
       if (type === 'vote') table = 'votes';
       if (type === 'merchandise') table = 'orders';
       if (type === 'gift') table = 'received_gifts';
 
-      await supabase.from(table).delete().eq('id', recordId);
+      try {
+        await supabase.from(table).update({ status: 'failed', payment_reference: stkResult.CheckoutRequestID || null }).eq('id', recordId);
+      } catch (e) {
+        console.error('Error marking pending record as failed:', e);
+      }
+
+      console.error('STK Push failed response:', stkResult);
 
       return new Response(
-        JSON.stringify({ error: stkResult.errorMessage || 'STK Push failed' }),
+        JSON.stringify({ error: stkResult.errorMessage || stkResult.error || 'STK Push failed', details: stkResult }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

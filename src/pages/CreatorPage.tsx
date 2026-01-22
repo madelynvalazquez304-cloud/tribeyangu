@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -169,6 +169,8 @@ const CreatorPage = () => {
     enabled: !!creator
   });
 
+  const queryClient = useQueryClient();
+
   const initiateDonation = useMutation({
     mutationFn: async () => {
       const amount = customAmount ? parseInt(customAmount) : selectedAmount;
@@ -197,7 +199,12 @@ const CreatorPage = () => {
       setPaymentStatus('polling');
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      console.error('initiateCampaignDonation error', error);
+      // If the function returned rich details, surface a short message and log the details
+      const errAny = error as any;
+      const message = errAny?.message || errAny?.error || (errAny?.data?.error) || 'STK Push failed';
+      toast.error(String(message));
+      if (errAny?.details) console.error('STK push details:', errAny.details);
       setPaymentStatus('idle');
       setPaymentDialog(false);
     }
@@ -287,6 +294,9 @@ const CreatorPage = () => {
           return;
         }
 
+        // Log raw response for debugging (will show status values like 'completed', 'failed', 'cancelled')
+        console.log('check-payment response', response.data);
+
         const successStats = ['completed', 'confirmed', 'processing'];
         if (successStats.includes(response.data?.status)) {
           setPaymentStatus('success');
@@ -314,6 +324,15 @@ const CreatorPage = () => {
       clearTimeout(timeout);
     };
   }, [paymentStatus, recordId, currentTxType]);
+
+  // When payment is successful, refresh campaign data so progress updates
+  useEffect(() => {
+    if (paymentStatus === 'success' && creator) {
+      // Invalidate both public and creator-specific campaign queries
+      queryClient.invalidateQueries({ queryKey: ['creator-campaigns-public', creator.id] });
+      queryClient.invalidateQueries({ queryKey: ['creator-campaigns', creator.id] });
+    }
+  }, [paymentStatus, creator, queryClient]);
 
   const handleDonate = () => {
     const amount = customAmount ? parseInt(customAmount) : selectedAmount;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,69 @@ const CreatorCampaigns = () => {
         },
         enabled: !!creator
     });
+
+        // Fetch completed donations for these campaigns and compute totals and donor counts client-side
+        const campaignIds = (campaigns || []).map(c => c.id);
+        const { data: donationSums } = useQuery<Record<string, { total: number; donors: number }>>({
+            queryKey: ['campaign-donation-sums', campaignIds.join(',')],
+            queryFn: async () => {
+                if (!campaignIds || campaignIds.length === 0) return {} as Record<string, { total: number; donors: number }>;
+                const { data, error } = await supabase
+                    .from('donations')
+                    .select('campaign_id, creator_amount')
+                    .in('campaign_id', campaignIds)
+                    .eq('status', 'completed');
+                if (error) throw error;
+                const sums: Record<string, { total: number; donors: number }> = {};
+                (data || []).forEach((d: any) => {
+                    const id = d.campaign_id;
+                    const amt = Number(d.creator_amount || 0);
+                    if (!sums[id]) sums[id] = { total: 0, donors: 0 };
+                    sums[id].total += amt;
+                    sums[id].donors += 1;
+                });
+                return sums;
+            },
+            enabled: !!campaignIds && campaignIds.length > 0
+        });
+
+        // Use donationSums to derive displayed campaign amounts (falls back to stored current_amount)
+        const displayedCampaigns = (campaigns || []).map((c: Campaign) => ({
+            ...c,
+            current_amount: donationSums && donationSums[c.id] ? donationSums[c.id].total : c.current_amount,
+            donors_count: donationSums && donationSums[c.id] ? donationSums[c.id].donors : 0
+        }));
+
+        // Realtime subscription: listen for any donations changes and invalidate queries so UI updates dynamically
+        useEffect(() => {
+            if (!campaignIds || campaignIds.length === 0) return;
+
+            const channel = supabase
+                .channel('donations-ch')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'donations' }, (payload: any) => {
+                    try {
+                        const record = payload.record;
+                        if (!record) return;
+                        // Only react when the change is for one of our campaigns
+                        if (record.campaign_id && campaignIds.includes(record.campaign_id)) {
+                            // Invalidate queries so react-query refetches data and the UI reflects the latest totals
+                            queryClient.invalidateQueries({ queryKey: ['creator-campaigns', creator?.id] });
+                            queryClient.invalidateQueries({ queryKey: ['campaign-donation-sums', campaignIds.join(',')] });
+                        }
+                    } catch (err) {
+                        console.error('donations realtime handler error', err);
+                    }
+                })
+                .subscribe();
+
+            return () => {
+                try {
+                    supabase.removeChannel(channel);
+                } catch (e) {
+                    // best-effort cleanup
+                }
+            };
+        }, [campaignIds.join(','), creator?.id]);
 
     const createCampaign = useMutation({
         mutationFn: async (newCampaign: any) => {
@@ -292,7 +355,7 @@ const CreatorCampaigns = () => {
                     </Card>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {campaigns?.map((campaign) => {
+                        {displayedCampaigns?.map((campaign) => {
                             const progress = Math.min(100, (Number(campaign.current_amount) / Number(campaign.goal_amount)) * 100);
 
                             return (
@@ -319,8 +382,11 @@ const CreatorCampaigns = () => {
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="space-y-2">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="font-semibold text-green-600">KES {Number(campaign.current_amount).toLocaleString()}</span>
+                                            <div className="flex justify-between items-center text-sm">
+                                                <div>
+                                                    <div className="font-semibold text-green-600">KES {Number(campaign.current_amount).toLocaleString()}</div>
+                                                    <div className="text-xs text-muted-foreground">Raised • {(campaign as any).donors_count || 0} donors</div>
+                                                </div>
                                                 <span className="text-muted-foreground">Goal: KES {Number(campaign.goal_amount).toLocaleString()}</span>
                                             </div>
                                             <Progress value={progress} className="h-2" />

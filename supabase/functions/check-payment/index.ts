@@ -19,9 +19,14 @@ serve(async (req) => {
 
     const { recordId, type } = await req.json();
 
-    const table = type === 'donation' ? 'donations' :
-      type === 'vote' ? 'votes' :
-        type === 'gift' ? 'received_gifts' : 'orders';
+    // Map type to table safely. Default to 'donations' for unknown types to avoid accidentally
+    // checking the orders table when type is missing/incorrect.
+    let table = 'donations';
+    if (type === 'vote') table = 'votes';
+    else if (type === 'gift') table = 'received_gifts';
+    else if (type === 'merchandise') table = 'orders';
+
+    console.log('check-payment invoked for', { recordId, type, table });
     const { data, error } = await supabase
       .from(table)
       .select('status, mpesa_receipt')
